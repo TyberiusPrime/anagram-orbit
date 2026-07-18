@@ -66,6 +66,13 @@
     padding:6px 10px; border-radius:20px; border:1px solid var(--line);
     color:var(--cyan); background:rgba(111,227,255,0.06); text-transform:uppercase;
   }
+  .cat-pill{
+    display:inline-block; margin-left:8px; padding:2px 8px; border-radius:20px;
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:1px;
+    text-transform:uppercase; color:var(--violet); border:1px solid var(--line);
+    background:rgba(177,140,255,0.08); vertical-align:middle;
+  }
+  .cat-pill:empty{display:none;}
   .timer{
     font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:600;
     padding:8px 16px; border-radius:12px; border:1px solid var(--line);
@@ -372,50 +379,34 @@
 })();
 
 /* ============ Word bank ============ */
-const WORD_BANK = [
-  ["GALAXY","a vast system of stars, gas, and dust bound together by gravity"],
-  ["NEBULA","a giant interstellar cloud of dust and gas, often where stars are born"],
-  ["ORBIT","the curved path an object follows around a star, planet, or moon"],
-  ["COMET","an icy body that glows and grows a tail as it nears the sun"],
-  ["METEOR","a streak of light from debris burning up in a planet's atmosphere"],
-  ["PLANET","a large celestial body that orbits a star and has cleared its path"],
-  ["ROCKET","a vehicle propelled forward by expelling exhaust gases"],
-  ["SHUTTLE","a reusable spacecraft designed for repeated trips to orbit"],
-  ["ASTEROID","a small rocky body, smaller than a planet, orbiting the sun"],
-  ["GRAVITY","the force that pulls objects toward one another"],
-  ["HORIZON","the line where the sky appears to meet the land or sea"],
-  ["CRATER","a bowl-shaped hollow formed by an impact or explosion"],
-  ["ECLIPSE","the blocking of light from one celestial body by another"],
-  ["VOYAGE","a long journey, especially by sea, air, or through space"],
-  ["CAPSULE","a small sealed compartment, often used to carry a crew"],
-  ["SATELLITE","an object that orbits a planet, natural or human-made"],
-  ["TELESCOPE","an instrument used to view distant objects in detail"],
-  ["UNIVERSE","all of space, time, matter, and energy that exists"],
-  ["COSMOS","the universe considered as a vast, orderly, harmonious system"],
-  ["STARDUST","fine particles of matter scattered by dying stars"],
-  ["LAUNCH","to send a vehicle or object forcefully into flight"],
-  ["MODULE","a self-contained unit that forms part of a larger structure"],
-  ["VACUUM","a space entirely empty of matter"],
-  ["ASTRONAUT","a person trained to travel and work in space"],
-  ["QUASAR","an extremely bright, distant object powered by a black hole"],
-  ["PULSAR","a spinning neutron star that emits regular pulses of radiation"],
-  ["NOVA","a star that suddenly flares to many times its normal brightness"],
-  ["ZENITH","the point in the sky directly above an observer"],
-  ["AURORA","a natural display of colored light in the polar sky"],
-  ["EQUATOR","the imaginary line circling a planet midway between its poles"],
-  ["LANDING","the act of arriving safely on a surface after flight"],
-  ["MISSION","an important task or expedition with a defined goal"],
-  ["STATION","a fixed base or outpost built for a particular purpose"],
-  ["VOYAGER","one who sets out on a long or adventurous journey"],
-  ["CRYSTAL","a clear, solid mineral with a regular repeating structure"],
-  ["SIGNAL","information sent as a sound, light, or radio transmission"],
-  ["ANTENNA","a device used to send or receive radio signals"],
-  ["PAYLOAD","the cargo or equipment carried by a vehicle or rocket"],
-  ["THRUSTER","a small engine used to steer or adjust a craft's motion"],
-  ["ECLIPTIC","the apparent path the sun traces across the sky each year"],
-  ["METEORITE","a fragment of rock or metal that survives to hit the ground"],
-  ["CONSTELLATION","a recognized group of stars forming a pattern"]
+/* Primary bank is fetched at startup from wordnet_words.json (15k+ words
+   with definitions + categories, derived from Princeton WordNet). This
+   compact list is only an emergency fallback for when that fetch fails
+   (e.g. the page was opened directly as a file:// URL with no local
+   server, so fetch() of a sibling JSON file is blocked by the browser). */
+const FALLBACK_BANK = [
+  {word:"GALAXY", def:"a vast system of stars, gas, and dust bound together by gravity", category:""},
+  {word:"NEBULA", def:"a giant interstellar cloud of dust and gas, often where stars are born", category:""},
+  {word:"ORBIT", def:"the curved path an object follows around a star, planet, or moon", category:""},
+  {word:"COMET", def:"an icy body that glows and grows a tail as it nears the sun", category:""},
+  {word:"METEOR", def:"a streak of light from debris burning up in a planet's atmosphere", category:""},
+  {word:"PLANET", def:"a large celestial body that orbits a star and has cleared its path", category:""},
+  {word:"ROCKET", def:"a vehicle propelled forward by expelling exhaust gases", category:""},
+  {word:"SHUTTLE", def:"a reusable spacecraft designed for repeated trips to orbit", category:""},
+  {word:"ASTEROID", def:"a small rocky body, smaller than a planet, orbiting the sun", category:""},
+  {word:"GRAVITY", def:"the force that pulls objects toward one another", category:""},
+  {word:"HORIZON", def:"the line where the sky appears to meet the land or sea", category:""},
+  {word:"CRATER", def:"a bowl-shaped hollow formed by an impact or explosion", category:""},
+  {word:"ECLIPSE", def:"the blocking of light from one celestial body by another", category:""},
+  {word:"VOYAGE", def:"a long journey, especially by sea, air, or through space", category:""},
+  {word:"CAPSULE", def:"a small sealed compartment, often used to carry a crew", category:""},
+  {word:"SATELLITE", def:"an object that orbits a planet, natural or human-made", category:""},
+  {word:"TELESCOPE", def:"an instrument used to view distant objects in detail", category:""},
+  {word:"UNIVERSE", def:"all of space, time, matter, and energy that exists", category:""},
+  {word:"COSMOS", def:"the universe considered as a vast, orderly, harmonious system", category:""},
+  {word:"STARDUST", def:"fine particles of matter scattered by dying stars", category:""}
 ];
+let WORD_BANK = FALLBACK_BANK;
 
 /* ============ Seeded RNG (mulberry32) ============ */
 function hashSeed(str){
@@ -484,9 +475,9 @@ function newGame(mode){
   const order = seededShuffle(WORD_BANK.map((_,i)=>i), rng);
   const chosen = order.slice(0,18).map(i => WORD_BANK[i]);
 
-  const words = chosen.map(([word, def]) => ({
-    word, def,
-    letters: shuffleLetters(word, rng)
+  const words = chosen.map(w => ({
+    word: w.word, def: w.def, category: w.category || '',
+    letters: shuffleLetters(w.word, rng)
   }));
 
   state = {
@@ -543,13 +534,13 @@ function renderBoardShell(){
         <div class="dh-text" id="defHintText"></div>
       </div>
       <div class="reveal" id="reveal">
-        <div class="rword" id="revealWord"></div>
+        <div class="rword"><span id="revealWord"></span><span class="cat-pill" id="revealCat"></span></div>
         <div class="rdef" id="revealDef"></div>
         <div class="rmeta" id="revealMeta"></div>
         <button id="nextBtn" type="button">Next word →</button>
       </div>
       <div class="skip-reveal" id="skipReveal">
-        <div class="rword" id="skipWord"></div>
+        <div class="rword"><span id="skipWord"></span><span class="cat-pill" id="skipCat"></span></div>
         <div class="rdef" id="skipDef"></div>
       </div>
     </div>`;
@@ -730,9 +721,10 @@ function handleCorrect(){
   });
 
   renderProgress();
-  addLogEntry(w.word, w.def, false, timeTaken);
+  addLogEntry(w.word, w.def, false, timeTaken, w.category);
 
   document.getElementById('revealWord').textContent = w.word;
+  document.getElementById('revealCat').textContent = w.category || '';
   document.getElementById('revealDef').textContent = w.def;
   document.getElementById('revealMeta').textContent = `solved in ${formatTime(timeTaken)}`;
   document.getElementById('reveal').classList.add('show');
@@ -797,9 +789,10 @@ function useSkip(){
   flashPenalty();
   state.solved.push({index: state.currentIndex, word:w.word, def:w.def, skipped:true, timeTaken:null});
   renderProgress();
-  addLogEntry(w.word, w.def, true, null);
+  addLogEntry(w.word, w.def, true, null, w.category);
 
   document.getElementById('skipWord').textContent = w.word;
+  document.getElementById('skipCat').textContent = w.category || '';
   document.getElementById('skipDef').textContent = w.def;
   document.getElementById('skipReveal').classList.add('show');
   document.getElementById('hintBtn').disabled = true;
@@ -819,7 +812,7 @@ function flashPenalty(){
 }
 
 /* ---------- Mission log ---------- */
-function addLogEntry(word, def, skipped, timeTaken){
+function addLogEntry(word, def, skipped, timeTaken, category){
   const list = document.getElementById('logList');
   const empty = list.querySelector('.log-empty');
   if(empty) empty.remove();
@@ -827,7 +820,7 @@ function addLogEntry(word, def, skipped, timeTaken){
   const entry = document.createElement('div');
   entry.className = 'log-entry ' + (skipped ? 'skip' : 'win');
   entry.innerHTML = `
-    <div class="lw"><span>${word}</span><span class="tag">${skipped ? 'SKIPPED' : formatTime(timeTaken)}</span></div>
+    <div class="lw"><span>${word}${category ? `<span class="cat-pill">${category}</span>` : ''}</span><span class="tag">${skipped ? 'SKIPPED' : formatTime(timeTaken)}</span></div>
     <div class="ld">${def}</div>`;
   list.appendChild(entry);
   list.scrollTop = list.scrollHeight;
@@ -916,7 +909,7 @@ function finishGame(){
     entry.className = 'log-entry ' + (rec && rec.skipped ? 'skip' : 'win');
     const tag = rec ? (rec.skipped ? 'SKIPPED' : formatTime(rec.timeTaken)) : '—';
     entry.innerHTML = `
-      <div class="lw"><span>${i+1}. ${w.word}</span><span class="tag">${tag}</span></div>
+      <div class="lw"><span>${i+1}. ${w.word}${w.category ? `<span class="cat-pill">${w.category}</span>` : ''}</span><span class="tag">${tag}</span></div>
       <div class="ld">${w.def}</div>`;
     finalList.appendChild(entry);
   });
@@ -936,10 +929,23 @@ document.addEventListener('keydown', (e)=>{
   }
 });
 
+/* ---------- Word bank loading ---------- */
+async function loadWordBank(){
+  try{
+    const resp = await fetch('wordnet_words.json');
+    if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if(!Array.isArray(data) || data.length < 18) throw new Error('unexpected data shape');
+    WORD_BANK = data;
+  } catch(err){
+    console.warn('Could not load wordnet_words.json, using compact fallback word bank instead:', err);
+  }
+}
+
 /* ---------- Init ---------- */
 document.getElementById('randomBtn').addEventListener('click', ()=> newGame('random'));
 
-newGame('daily');
+loadWordBank().then(()=> newGame('daily'));
 </script>
 </body>
 </html>
