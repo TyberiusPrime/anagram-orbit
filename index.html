@@ -206,33 +206,7 @@
   .actions button:disabled{opacity:0.35; cursor:not-allowed;}
   .actions button.skip:hover:not(:disabled){border-color:var(--red); color:var(--red);}
 
-  /* definition reveal */
-  .reveal{
-    margin-top:22px; padding:18px 20px; border-radius:14px;
-    background:rgba(110,240,168,0.08); border:1px solid rgba(110,240,168,0.35);
-    display:none;
-  }
-  .reveal.show{display:block; animation:fadeup .35s ease;}
   @keyframes fadeup{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
-  .reveal .rword{
-    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:19px; color:var(--green);
-    letter-spacing:1px; margin-bottom:4px;
-  }
-  .reveal .rdef{color:var(--star); font-size:14px; line-height:1.5; opacity:0.9;}
-  .reveal .rmeta{margin-top:10px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim);}
-  .reveal button{
-    margin-top:14px; background:var(--green); color:#06210f; border:none;
-    padding:9px 16px; border-radius:9px; font-weight:700; font-size:13px; cursor:pointer;
-  }
-
-  .skip-reveal{
-    margin-top:22px; padding:18px 20px; border-radius:14px;
-    background:rgba(255,171,94,0.08); border:1px solid rgba(255,171,94,0.35);
-    display:none;
-  }
-  .skip-reveal.show{display:block; animation:fadeup .35s ease;}
-  .skip-reveal .rword{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:19px; color:var(--amber);}
-  .skip-reveal .rdef{color:var(--star); font-size:14px; margin-top:4px; opacity:0.9;}
 
   .def-hint{
     margin-top:18px; padding:14px 18px; border-radius:14px;
@@ -264,6 +238,16 @@
     background:rgba(255,255,255,0.02);
   }
   .log-entry.skip{border-color:rgba(255,171,94,0.4); background:rgba(255,171,94,0.05);}
+  .log-entry.flash-win{animation:logFlashWin 2s ease-out;}
+  .log-entry.flash-skip{animation:logFlashSkip 2s ease-out;}
+  @keyframes logFlashWin{
+    0%{background:rgba(110,240,168,0.35); border-color:var(--green);}
+    100%{background:rgba(255,255,255,0.02); border-color:var(--line);}
+  }
+  @keyframes logFlashSkip{
+    0%{background:rgba(255,171,94,0.45); border-color:var(--amber);}
+    100%{background:rgba(255,171,94,0.05); border-color:rgba(255,171,94,0.4);}
+  }
   .log-entry .lw{
     font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;
     display:flex; justify-content:space-between; align-items:center;
@@ -533,22 +517,11 @@ function renderBoardShell(){
         <div class="dh-label">Definition</div>
         <div class="dh-text" id="defHintText"></div>
       </div>
-      <div class="reveal" id="reveal">
-        <div class="rword"><span id="revealWord"></span><span class="cat-pill" id="revealCat"></span></div>
-        <div class="rdef" id="revealDef"></div>
-        <div class="rmeta" id="revealMeta"></div>
-        <button id="nextBtn" type="button">Next word →</button>
-      </div>
-      <div class="skip-reveal" id="skipReveal">
-        <div class="rword"><span id="skipWord"></span><span class="cat-pill" id="skipCat"></span></div>
-        <div class="rdef" id="skipDef"></div>
-      </div>
     </div>`;
 
   document.getElementById('hintBtn').addEventListener('click', useHint);
   document.getElementById('defBtn').addEventListener('click', useDefinitionHint);
   document.getElementById('skipBtn').addEventListener('click', useSkip);
-  document.getElementById('nextBtn').addEventListener('click', ()=> advanceWord());
 }
 
 /* ---------- Rendering ---------- */
@@ -565,8 +538,6 @@ function setupWord(i){
   w.letters.forEach(t => t.used = false);
 
   document.getElementById('wordCount').textContent = `WORD ${i+1} / 18`;
-  document.getElementById('reveal').classList.remove('show');
-  document.getElementById('skipReveal').classList.remove('show');
   document.getElementById('defHint').classList.remove('show');
   document.getElementById('hintBtn').disabled = false;
   document.getElementById('defBtn').disabled = false;
@@ -723,11 +694,7 @@ function handleCorrect(){
   renderProgress();
   addLogEntry(w.word, w.def, false, timeTaken, w.category);
 
-  document.getElementById('revealWord').textContent = w.word;
-  document.getElementById('revealCat').textContent = w.category || '';
-  document.getElementById('revealDef').textContent = w.def;
-  document.getElementById('revealMeta').textContent = `solved in ${formatTime(timeTaken)}`;
-  document.getElementById('reveal').classList.add('show');
+  document.getElementById('defHint').classList.remove('show');
   document.getElementById('hintBtn').disabled = true;
   document.getElementById('defBtn').disabled = true;
   document.getElementById('skipBtn').disabled = true;
@@ -791,10 +758,7 @@ function useSkip(){
   renderProgress();
   addLogEntry(w.word, w.def, true, null, w.category);
 
-  document.getElementById('skipWord').textContent = w.word;
-  document.getElementById('skipCat').textContent = w.category || '';
-  document.getElementById('skipDef').textContent = w.def;
-  document.getElementById('skipReveal').classList.add('show');
+  document.getElementById('defHint').classList.remove('show');
   document.getElementById('hintBtn').disabled = true;
   document.getElementById('defBtn').disabled = true;
   document.getElementById('skipBtn').disabled = true;
@@ -818,7 +782,7 @@ function addLogEntry(word, def, skipped, timeTaken, category){
   if(empty) empty.remove();
 
   const entry = document.createElement('div');
-  entry.className = 'log-entry ' + (skipped ? 'skip' : 'win');
+  entry.className = 'log-entry ' + (skipped ? 'skip flash-skip' : 'win flash-win');
   entry.innerHTML = `
     <div class="lw"><span>${word}${category ? `<span class="cat-pill">${category}</span>` : ''}</span><span class="tag">${skipped ? 'SKIPPED' : formatTime(timeTaken)}</span></div>
     <div class="ld">${def}</div>`;
