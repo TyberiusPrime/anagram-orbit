@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Anagram Orbit</title>
+<title>Anagramm-Orbit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -314,14 +314,14 @@
 <div class="wrap">
   <header>
     <div class="brand">
-      <h1>Anagram Orbit</h1>
-      <p id="subtitle">Unscramble 18 words. Chart your fastest orbit.</p>
+      <h1>Anagramm-Orbit</h1>
+      <p id="subtitle">Entwirre 18 Wörter. Miss deine schnellste Umlaufzeit.</p>
     </div>
     <div class="hud">
-      <span class="mode-badge" id="modeBadge">DAILY</span>
+      <span class="mode-badge" id="modeBadge">TÄGLICH</span>
       <div class="timer" id="timer">00:00</div>
-      <button class="ghost" id="randomBtn">New Random Game</button>
-      <button class="ghost" id="langBtn" type="button" title="Play in German">🌐 Deutsch</button>
+      <button class="ghost" id="randomBtn">Neues Zufallsspiel</button>
+      <button class="ghost" id="langBtn" type="button" title="Play in English">🌐 English</button>
     </div>
   </header>
 
@@ -364,32 +364,32 @@
 })();
 
 /* ============ Word bank ============ */
-/* Primary bank is fetched at startup from wordnet_words.json (15k+ words
-   with definitions + categories, derived from Princeton WordNet). This
-   compact list is only an emergency fallback for when that fetch fails
-   (e.g. the page was opened directly as a file:// URL with no local
-   server, so fetch() of a sibling JSON file is blocked by the browser). */
+/* Primary bank is fetched at startup from odenet_words.json (~500 German
+   words with definitions + word-class, derived from OdeNet, the Open German
+   WordNet). This compact list is only an emergency fallback for when that
+   fetch fails (e.g. the page was opened directly as a file:// URL with no
+   local server, so fetch() of a sibling JSON file is blocked by the browser). */
 const FALLBACK_BANK = [
-  {word:"GALAXY", def:"a vast system of stars, gas, and dust bound together by gravity", category:""},
-  {word:"NEBULA", def:"a giant interstellar cloud of dust and gas, often where stars are born", category:""},
-  {word:"ORBIT", def:"the curved path an object follows around a star, planet, or moon", category:""},
-  {word:"COMET", def:"an icy body that glows and grows a tail as it nears the sun", category:""},
-  {word:"METEOR", def:"a streak of light from debris burning up in a planet's atmosphere", category:""},
-  {word:"PLANET", def:"a large celestial body that orbits a star and has cleared its path", category:""},
-  {word:"ROCKET", def:"a vehicle propelled forward by expelling exhaust gases", category:""},
-  {word:"SHUTTLE", def:"a reusable spacecraft designed for repeated trips to orbit", category:""},
-  {word:"ASTEROID", def:"a small rocky body, smaller than a planet, orbiting the sun", category:""},
-  {word:"GRAVITY", def:"the force that pulls objects toward one another", category:""},
-  {word:"HORIZON", def:"the line where the sky appears to meet the land or sea", category:""},
-  {word:"CRATER", def:"a bowl-shaped hollow formed by an impact or explosion", category:""},
-  {word:"ECLIPSE", def:"the blocking of light from one celestial body by another", category:""},
-  {word:"VOYAGE", def:"a long journey, especially by sea, air, or through space", category:""},
-  {word:"CAPSULE", def:"a small sealed compartment, often used to carry a crew", category:""},
-  {word:"SATELLITE", def:"an object that orbits a planet, natural or human-made", category:""},
-  {word:"TELESCOPE", def:"an instrument used to view distant objects in detail", category:""},
-  {word:"UNIVERSE", def:"all of space, time, matter, and energy that exists", category:""},
-  {word:"COSMOS", def:"the universe considered as a vast, orderly, harmonious system", category:""},
-  {word:"STARDUST", def:"fine particles of matter scattered by dying stars", category:""}
+  {word:"GALAXIE", def:"ein riesiges System aus Sternen, Gas und Staub, das durch Schwerkraft zusammengehalten wird", category:""},
+  {word:"NEBEL", def:"eine riesige interstellare Wolke aus Staub und Gas, oft der Geburtsort von Sternen", category:""},
+  {word:"UMLAUFBAHN", def:"der gekrümmte Pfad, dem ein Objekt um einen Stern, Planeten oder Mond folgt", category:""},
+  {word:"KOMET", def:"ein eisiger Körper, der beim Näherkommen an die Sonne leuchtet und einen Schweif bildet", category:""},
+  {word:"METEOR", def:"ein Lichtstreifen von Trümmern, die in der Atmosphäre eines Planeten verglühen", category:""},
+  {word:"PLANET", def:"ein großer Himmelskörper, der einen Stern umkreist und seine Bahn freigeräumt hat", category:""},
+  {word:"RAKETE", def:"ein Fahrzeug, das durch den Ausstoß von Abgasen angetrieben wird", category:""},
+  {word:"RAUMFÄHRE", def:"ein wiederverwendbares Raumfahrzeug für wiederholte Flüge in die Umlaufbahn", category:""},
+  {word:"ASTEROID", def:"ein kleiner, felsiger Körper, kleiner als ein Planet, der die Sonne umkreist", category:""},
+  {word:"SCHWERKRAFT", def:"die Kraft, die Objekte zueinander hinzieht", category:""},
+  {word:"HORIZONT", def:"die Linie, an der der Himmel den Boden oder das Meer zu berühren scheint", category:""},
+  {word:"KRATER", def:"eine schüsselförmige Vertiefung, die durch einen Einschlag oder eine Explosion entsteht", category:""},
+  {word:"FINSTERNIS", def:"die Verdunkelung des Lichts eines Himmelskörpers durch einen anderen", category:""},
+  {word:"REISE", def:"eine lange Fahrt, besonders zu Wasser, in der Luft oder durch den Weltraum", category:""},
+  {word:"KAPSEL", def:"ein kleiner, abgeschlossener Raum, oft zum Transport einer Besatzung genutzt", category:""},
+  {word:"SATELLIT", def:"ein Objekt, das einen Planeten umkreist, natürlich oder künstlich", category:""},
+  {word:"TELESKOP", def:"ein Instrument zur detaillierten Betrachtung entfernter Objekte", category:""},
+  {word:"UNIVERSUM", def:"alles an Raum, Zeit, Materie und Energie, das existiert", category:""},
+  {word:"KOSMOS", def:"das Universum, betrachtet als ein weites, geordnetes, harmonisches System", category:""},
+  {word:"STERNENSTAUB", def:"feine Materieteilchen, die von sterbenden Sternen verstreut werden", category:""}
 ];
 let WORD_BANK = FALLBACK_BANK;
 
@@ -436,9 +436,9 @@ let lastLogEntryEl = null;
 
 /* Gradient run from the first letter picked (cyan) to the last (violet).
    Works purely off click ORDER/position, never off which physical tile —
-   so duplicate letters (e.g. the two A's in GALAXY) are completely
-   interchangeable: correctness and coloring both key off the character
-   and the position it was placed in, never off a specific tile id. */
+   so duplicate letters are completely interchangeable: correctness and
+   coloring both key off the character and the position it was placed in,
+   never off a specific tile id. */
 const GRADIENT_FROM = [111,227,255];
 const GRADIENT_TO = [177,140,255];
 function gradientColor(pos, total){
@@ -498,10 +498,10 @@ function newGame(mode, seedOverride){
     waitingForNext: false
   };
 
-  document.getElementById('modeBadge').textContent = effectiveMode === 'daily' ? 'DAILY' : 'RANDOM';
+  document.getElementById('modeBadge').textContent = effectiveMode === 'daily' ? 'TÄGLICH' : 'ZUFALL';
   document.getElementById('subtitle').textContent = effectiveMode === 'daily'
-    ? `Today's puzzle · ${todayKey()}`
-    : 'Random orbit · share this URL to send this exact puzzle';
+    ? `Heutiges Rätsel · ${todayKey()}`
+    : 'Zufalls-Orbit · teile diese URL, um genau dieses Rätsel zu senden';
 
   renderBoardShell();
   lastLogEntryEl = null;
@@ -516,21 +516,21 @@ function renderBoardShell(){
   // so buttons never end up wired to stale or missing elements.
   document.getElementById('board').innerHTML = `
     <div class="log">
-      <h3>Mission Log</h3>
-      <div class="sub" id="logSub">0 / 18 charted</div>
+      <h3>Missionslog</h3>
+      <div class="sub" id="logSub">0 / 18 erfasst</div>
       <div class="log-list" id="logList">
-        <div class="log-empty">Solved words will appear here as you go.</div>
+        <div class="log-empty">Gelöste Wörter erscheinen hier, sobald du sie schaffst.</div>
       </div>
     </div>
     <div class="card" id="puzzleCard">
-      <div class="word-count" id="wordCount">WORD 1 / 18</div>
+      <div class="word-count" id="wordCount">WORT 1 / 18</div>
       <div class="slots" id="slots"></div>
-      <div class="divider">select the letters, in order</div>
+      <div class="divider">wähle die Buchstaben, in der richtigen Reihenfolge</div>
       <div class="tiles" id="tiles"></div>
       <div class="actions">
-        <button id="hintBtn" type="button">✦ First letter <span style="color:var(--dim)">(+0:30)</span></button>
-        <button id="defBtn" type="button">◈ Reveal definition <span style="color:var(--dim)">(+1:00)</span></button>
-        <button class="skip" id="skipBtn" type="button">⤳ Skip word <span style="color:var(--dim)">(+2:00)</span></button>
+        <button id="hintBtn" type="button">✦ Erster Buchstabe <span style="color:var(--dim)">(+0:30)</span></button>
+        <button id="defBtn" type="button">◈ Definition zeigen <span style="color:var(--dim)">(+1:00)</span></button>
+        <button class="skip" id="skipBtn" type="button">⤳ Wort überspringen <span style="color:var(--dim)">(+2:00)</span></button>
       </div>
       <div class="def-hint" id="defHint">
         <div class="dh-label">Definition</div>
@@ -556,7 +556,7 @@ function setupWord(i){
   const w = currentWordObj();
   w.letters.forEach(t => t.used = false);
 
-  document.getElementById('wordCount').textContent = `WORD ${i+1} / 18`;
+  document.getElementById('wordCount').textContent = `WORT ${i+1} / 18`;
   document.getElementById('defHint').classList.remove('show');
   document.getElementById('hintBtn').disabled = false;
   document.getElementById('defBtn').disabled = false;
@@ -575,7 +575,7 @@ function renderTiles(){
     const btn = document.createElement('button');
     btn.className = 'tile' + (tile.used ? ' used' : '') + (tile.hinted ? ' hinted' : '');
     btn.type = 'button';
-    btn.setAttribute('aria-label', tile.hinted ? `letter ${tile.ch}, revealed, locked` : `letter ${tile.ch}`);
+    btn.setAttribute('aria-label', tile.hinted ? `Buchstabe ${tile.ch}, aufgedeckt, gesperrt` : `Buchstabe ${tile.ch}`);
     btn.textContent = tile.ch;
     if(tile.used){
       const pos = state.currentInput.indexOf(tile.id);
@@ -632,7 +632,7 @@ function renderProgress(){
     if(solvedEntry) cls += solvedEntry.skipped ? ' skipped' : ' solved';
     else if(i === state.currentIndex && !state.finished) cls += ' current';
     d.className = cls;
-    d.title = `Word ${i+1}`;
+    d.title = `Wort ${i+1}`;
     row.appendChild(d);
   }
 }
@@ -803,12 +803,12 @@ function addLogEntry(word, def, skipped, timeTaken, category){
   const entry = document.createElement('div');
   entry.className = 'log-entry ' + (skipped ? 'skip flash-skip' : 'win flash-win');
   entry.innerHTML = `
-    <div class="lw"><span>${word}${category ? `<span class="cat-pill">${category}</span>` : ''}</span><span class="tag">${skipped ? 'SKIPPED' : formatTime(timeTaken)}</span></div>
+    <div class="lw"><span>${word}${category ? `<span class="cat-pill">${category}</span>` : ''}</span><span class="tag">${skipped ? 'ÜBERSPRUNGEN' : formatTime(timeTaken)}</span></div>
     <div class="ld">${def}</div>`;
   list.appendChild(entry);
   list.scrollTop = list.scrollHeight;
   lastLogEntryEl = entry;
-  document.getElementById('logSub').textContent = `${state.solved.length} / ${state.words.length} charted`;
+  document.getElementById('logSub').textContent = `${state.solved.length} / ${state.words.length} erfasst`;
 }
 
 /* ---------- Timer ---------- */
@@ -866,22 +866,22 @@ function finishGame(){
   const board = document.getElementById('board');
   board.innerHTML = `
     <div class="card end-card">
-      <p class="tag">Orbit complete</p>
+      <p class="tag">Umlaufbahn abgeschlossen</p>
       <div class="big-time">${formatTime(totalElapsed)}</div>
-      <p class="tag">total time, including penalties</p>
+      <p class="tag">Gesamtzeit, inkl. Strafzeiten</p>
       <div class="end-stats">
-        <div><div class="n" style="color:var(--green)">${solvedCount}</div><div class="l">Solved</div></div>
-        <div><div class="n" style="color:var(--amber)">${skippedCount}</div><div class="l">Skipped</div></div>
-        <div><div class="n" style="color:var(--cyan)">+${formatTime(hintPenalty)}</div><div class="l">Penalties</div></div>
+        <div><div class="n" style="color:var(--green)">${solvedCount}</div><div class="l">Gelöst</div></div>
+        <div><div class="n" style="color:var(--amber)">${skippedCount}</div><div class="l">Übersprungen</div></div>
+        <div><div class="n" style="color:var(--cyan)">+${formatTime(hintPenalty)}</div><div class="l">Strafzeiten</div></div>
       </div>
       <div class="end-actions">
-        <button class="primary" id="playRandomAgain">Play a random game</button>
-        <button class="secondary" id="reviewBtn">Review words below</button>
+        <button class="primary" id="playRandomAgain">Zufallsspiel spielen</button>
+        <button class="secondary" id="reviewBtn">Wörter unten ansehen</button>
       </div>
     </div>
     <div class="log" style="max-height:none;">
-      <h3>Full Mission Log</h3>
-      <div class="sub">Scroll to review every word from this run</div>
+      <h3>Vollständiges Missionslog</h3>
+      <div class="sub">Scrolle, um jedes Wort dieser Runde anzusehen</div>
       <div class="log-list" id="finalLogList" style="max-height:520px;"></div>
     </div>
   `;
@@ -890,7 +890,7 @@ function finishGame(){
     const rec = state.solved.find(s=>s.index===i);
     const entry = document.createElement('div');
     entry.className = 'log-entry ' + (rec && rec.skipped ? 'skip' : 'win');
-    const tag = rec ? (rec.skipped ? 'SKIPPED' : formatTime(rec.timeTaken)) : '—';
+    const tag = rec ? (rec.skipped ? 'ÜBERSPRUNGEN' : formatTime(rec.timeTaken)) : '—';
     entry.innerHTML = `
       <div class="lw"><span>${i+1}. ${w.word}${w.category ? `<span class="cat-pill">${w.category}</span>` : ''}</span><span class="tag">${tag}</span></div>
       <div class="ld">${w.def}</div>`;
@@ -915,19 +915,19 @@ document.addEventListener('keydown', (e)=>{
 /* ---------- Word bank loading ---------- */
 async function loadWordBank(){
   try{
-    const resp = await fetch('wordnet_words.json');
+    const resp = await fetch('odenet_words.json');
     if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     if(!Array.isArray(data) || data.length < 18) throw new Error('unexpected data shape');
     WORD_BANK = data;
   } catch(err){
-    console.warn('Could not load wordnet_words.json, using compact fallback word bank instead:', err);
+    console.warn('Could not load odenet_words.json, using compact fallback word bank instead:', err);
   }
 }
 
 /* ---------- Init ---------- */
 document.getElementById('randomBtn').addEventListener('click', ()=> newGame('random'));
-document.getElementById('langBtn').addEventListener('click', ()=>{ window.location.href = 'index.de.html' + location.hash; });
+document.getElementById('langBtn').addEventListener('click', ()=>{ window.location.href = 'index.html' + location.hash; });
 
 loadWordBank().then(()=>{
   const sharedSeed = seedFromHash();
