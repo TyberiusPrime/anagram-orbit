@@ -81,12 +81,19 @@
   }
   .timer.penalty-flash{animation:penalty 0.6s ease;}
   @keyframes penalty{0%{color:var(--red);}100%{color:var(--star);}}
-  button.ghost{
+  .ghost{
     font-family:'Inter',sans-serif; font-size:13px; font-weight:600;
     background:transparent; color:var(--star); border:1px solid var(--line);
     padding:9px 14px; border-radius:10px; cursor:pointer; transition:all .15s ease;
   }
-  button.ghost:hover{border-color:var(--cyan); color:var(--cyan); background:rgba(111,227,255,0.06);}
+  .ghost:hover{border-color:var(--cyan); color:var(--cyan); background:rgba(111,227,255,0.06);}
+  select.ghost{
+    -webkit-appearance:none; appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238890c0'/></svg>");
+    background-repeat:no-repeat; background-position:right 12px center;
+    padding-right:30px;
+  }
+  select.ghost option{background:var(--panel-2); color:var(--star);}
 
   /* ---------- Progress ---------- */
   .progress-row{
@@ -320,8 +327,12 @@
     <div class="hud">
       <span class="mode-badge" id="modeBadge">DAILY</span>
       <div class="timer" id="timer">00:00</div>
+      <select class="ghost" id="packSelect" title="Choose word pack / language">
+        <option value="all">🌐 English</option>
+        <option value="animals">🐾 English · Animals</option>
+        <option value="de" data-nav="index.de.html">🇩🇪 Deutsch</option>
+      </select>
       <button class="ghost" id="randomBtn">New Random Game</button>
-      <button class="ghost" id="langBtn" type="button" title="Play in German">🌐 Deutsch</button>
     </div>
   </header>
 
@@ -391,7 +402,20 @@ const FALLBACK_BANK = [
   {word:"COSMOS", def:"the universe considered as a vast, orderly, harmonious system", category:""},
   {word:"STARDUST", def:"fine particles of matter scattered by dying stars", category:""}
 ];
+let RAW_BANK = FALLBACK_BANK;
 let WORD_BANK = FALLBACK_BANK;
+
+/* "Packs" are client-side filters over the same fetched word list — no
+   extra network request needed. 'animals' keeps only WordNet's noun.animal
+   category. Falls back to the full bank if a pack ends up too small to
+   build a puzzle from (e.g. the compact FALLBACK_BANK has no categories). */
+function getPackWords(pack){
+  if(pack === 'animals'){
+    const animals = RAW_BANK.filter(w => w.category === 'noun.animal');
+    if(animals.length >= 18) return animals;
+  }
+  return RAW_BANK;
+}
 
 /* ============ Seeded RNG (mulberry32) ============ */
 function hashSeed(str){
@@ -454,26 +478,40 @@ function todayKey(){
 /* The seed string lives in the URL hash so a puzzle can be shared by
    copying the link — whoever opens it gets the exact same words in the
    exact same shuffled order. `mode` only matters to pick a fresh seed;
-   once a seed exists, DAILY vs RANDOM labeling is derived from it. */
-function seedFromHash(){
+   once a seed exists, DAILY vs RANDOM labeling is derived from it.
+   The hash format is `<pack>:<seed>` so the word-pack choice (all vs.
+   animals) survives a shared link too; a bare seed with no recognized
+   pack prefix (older links, or a colon-free seed) is treated as pack 'all'. */
+function parseHash(){
   const raw = location.hash.slice(1);
   if(!raw) return null;
-  try{ return decodeURIComponent(raw); } catch(e){ return null; }
+  let decoded;
+  try{ decoded = decodeURIComponent(raw); } catch(e){ return null; }
+  const idx = decoded.indexOf(':');
+  if(idx === -1) return {pack:'all', seed: decoded};
+  const pack = decoded.slice(0,idx);
+  const seed = decoded.slice(idx+1);
+  if(!seed || (pack !== 'all' && pack !== 'animals')) return {pack:'all', seed: decoded};
+  return {pack, seed};
 }
-function putSeedInHash(seedStr){
-  const encoded = encodeURIComponent(seedStr);
+function putHash(pack, seedStr){
+  const encoded = encodeURIComponent(`${pack}:${seedStr}`);
   if(location.hash.slice(1) !== encoded){
     history.replaceState(null, '', '#' + encoded);
   }
 }
 
-function newGame(mode, seedOverride){
+function newGame(mode, seedOverride, packOverride){
+  let pack = packOverride || 'all';
   const seedStr = seedOverride || (mode === 'daily'
     ? `daily-${todayKey()}`
     : `random-${Date.now()}-${Math.random()}`);
-  putSeedInHash(seedStr);
   const effectiveMode = seedStr.startsWith('daily-') ? 'daily' : 'random';
   const rng = mulberry32(hashSeed(seedStr));
+
+  WORD_BANK = getPackWords(pack);
+  if(WORD_BANK === RAW_BANK) pack = 'all'; // pack fell back (too few matches)
+  putHash(pack, seedStr);
 
   const order = seededShuffle(WORD_BANK.map((_,i)=>i), rng);
   const chosen = order.slice(0,18).map(i => WORD_BANK[i]);
@@ -485,6 +523,7 @@ function newGame(mode, seedOverride){
 
   state = {
     mode: effectiveMode,
+    pack,
     words,
     currentIndex: 0,
     currentInput: [],
@@ -498,10 +537,12 @@ function newGame(mode, seedOverride){
     waitingForNext: false
   };
 
-  document.getElementById('modeBadge').textContent = effectiveMode === 'daily' ? 'DAILY' : 'RANDOM';
+  document.getElementById('modeBadge').textContent =
+    (effectiveMode === 'daily' ? 'DAILY' : 'RANDOM') + (pack === 'animals' ? ' · ANIMALS' : '');
   document.getElementById('subtitle').textContent = effectiveMode === 'daily'
     ? `Today's puzzle · ${todayKey()}`
     : 'Random orbit · share this URL to send this exact puzzle';
+  document.getElementById('packSelect').value = pack;
 
   renderBoardShell();
   lastLogEntryEl = null;
@@ -897,7 +938,7 @@ function finishGame(){
     finalList.appendChild(entry);
   });
 
-  document.getElementById('playRandomAgain').addEventListener('click', ()=> newGame('random'));
+  document.getElementById('playRandomAgain').addEventListener('click', ()=> newGame('random', null, state.pack));
   document.getElementById('reviewBtn').addEventListener('click', ()=>{
     finalList.scrollIntoView({behavior:'smooth', block:'start'});
   });
@@ -919,22 +960,42 @@ async function loadWordBank(){
     if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     if(!Array.isArray(data) || data.length < 18) throw new Error('unexpected data shape');
-    WORD_BANK = data;
+    RAW_BANK = data;
   } catch(err){
     console.warn('Could not load wordnet_words.json, using compact fallback word bank instead:', err);
   }
 }
 
 /* ---------- Init ---------- */
-document.getElementById('randomBtn').addEventListener('click', ()=> newGame('random'));
-document.getElementById('langBtn').addEventListener('click', ()=>{ window.location.href = 'index.de.html' + location.hash; });
+/* Cross-page nav (switching site/language via the dropdown) rebuilds the
+   hash explicitly with the chosen pack rather than just carrying the
+   current hash forward, since the destination's pack vocabulary may differ
+   from whatever pack this page currently has active. */
+function crossNav(navFile, pack){
+  const seedPart = (parseHash() || {}).seed;
+  window.location.href = seedPart ? `${navFile}#${encodeURIComponent(pack + ':' + seedPart)}` : navFile;
+}
+document.getElementById('randomBtn').addEventListener('click', ()=> newGame('random', null, state.pack));
+document.getElementById('packSelect').addEventListener('change', (e)=>{
+  const opt = e.target.selectedOptions[0];
+  if(opt.dataset.nav){
+    crossNav(opt.dataset.nav, 'all'); // destination (German) ignores pack anyway
+  } else {
+    // Reinterpret the SAME puzzle identity (daily or random) under the new
+    // pack, rather than forcing a fresh random seed — so switching packs
+    // while on today's daily puzzle keeps it "today's puzzle", just from
+    // a different word list.
+    const seedPart = (parseHash() || {}).seed;
+    newGame(null, seedPart, opt.value);
+  }
+});
 
 loadWordBank().then(()=>{
-  const sharedSeed = seedFromHash();
-  if(sharedSeed){
-    newGame(null, sharedSeed);
+  const parsed = parseHash();
+  if(parsed && parsed.seed){
+    newGame(null, parsed.seed, parsed.pack);
   } else {
-    newGame('daily');
+    newGame('daily', null, 'all');
   }
 });
 </script>

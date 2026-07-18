@@ -81,12 +81,19 @@
   }
   .timer.penalty-flash{animation:penalty 0.6s ease;}
   @keyframes penalty{0%{color:var(--red);}100%{color:var(--star);}}
-  button.ghost{
+  .ghost{
     font-family:'Inter',sans-serif; font-size:13px; font-weight:600;
     background:transparent; color:var(--star); border:1px solid var(--line);
     padding:9px 14px; border-radius:10px; cursor:pointer; transition:all .15s ease;
   }
-  button.ghost:hover{border-color:var(--cyan); color:var(--cyan); background:rgba(111,227,255,0.06);}
+  .ghost:hover{border-color:var(--cyan); color:var(--cyan); background:rgba(111,227,255,0.06);}
+  select.ghost{
+    -webkit-appearance:none; appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238890c0'/></svg>");
+    background-repeat:no-repeat; background-position:right 12px center;
+    padding-right:30px;
+  }
+  select.ghost option{background:var(--panel-2); color:var(--star);}
 
   /* ---------- Progress ---------- */
   .progress-row{
@@ -320,8 +327,12 @@
     <div class="hud">
       <span class="mode-badge" id="modeBadge">TÄGLICH</span>
       <div class="timer" id="timer">00:00</div>
+      <select class="ghost" id="packSelect" title="Sprache / Wortliste wählen">
+        <option value="all" data-nav="index.html">🌐 English</option>
+        <option value="animals" data-nav="index.html">🐾 English · Animals</option>
+        <option value="de">🇩🇪 Deutsch</option>
+      </select>
       <button class="ghost" id="randomBtn">Neues Zufallsspiel</button>
-      <button class="ghost" id="langBtn" type="button" title="Play in English">🌐 English</button>
     </div>
   </header>
 
@@ -364,10 +375,11 @@
 })();
 
 /* ============ Word bank ============ */
-/* Primary bank is fetched at startup from odenet_words.json (~500 German
-   words with definitions + word-class, derived from OdeNet, the Open German
-   WordNet). This compact list is only an emergency fallback for when that
-   fetch fails (e.g. the page was opened directly as a file:// URL with no
+/* Primary bank is fetched at startup from dewiktionary_words.json (6k+
+   German words with definitions + word-class, extracted from the German
+   Wiktionary itself via kaikki.org/wiktextract). This compact list is only
+   an emergency fallback for when that fetch fails (e.g. the page was
+   opened directly as a file:// URL with no
    local server, so fetch() of a sibling JSON file is blocked by the browser). */
 const FALLBACK_BANK = [
   {word:"GALAXIE", def:"ein riesiges System aus Sternen, Gas und Staub, das durch Schwerkraft zusammengehalten wird", category:""},
@@ -391,7 +403,15 @@ const FALLBACK_BANK = [
   {word:"KOSMOS", def:"das Universum, betrachtet als ein weites, geordnetes, harmonisches System", category:""},
   {word:"STERNENSTAUB", def:"feine Materieteilchen, die von sterbenden Sternen verstreut werden", category:""}
 ];
+let RAW_BANK = FALLBACK_BANK;
 let WORD_BANK = FALLBACK_BANK;
+
+/* No themed sub-packs on the German side yet — this bank only has one
+   pack ('all'), but the function exists so the shared hash/newGame code
+   is identical in shape to index.html. */
+function getPackWords(pack){
+  return RAW_BANK;
+}
 
 /* ============ Seeded RNG (mulberry32) ============ */
 function hashSeed(str){
@@ -454,27 +474,37 @@ function todayKey(){
 /* The seed string lives in the URL hash so a puzzle can be shared by
    copying the link — whoever opens it gets the exact same words in the
    exact same shuffled order. `mode` only matters to pick a fresh seed;
-   once a seed exists, DAILY vs RANDOM labeling is derived from it. */
-function seedFromHash(){
+   once a seed exists, DAILY vs RANDOM labeling is derived from it.
+   The hash format is `<pack>:<seed>`, matching index.html, even though
+   this page only ever has one pack — it's what lets the language dropdown
+   carry the seed straight over into an English pack (all/animals). */
+function parseHash(){
   const raw = location.hash.slice(1);
   if(!raw) return null;
-  try{ return decodeURIComponent(raw); } catch(e){ return null; }
+  let decoded;
+  try{ decoded = decodeURIComponent(raw); } catch(e){ return null; }
+  const idx = decoded.indexOf(':');
+  if(idx === -1) return {pack:'all', seed: decoded};
+  const seed = decoded.slice(idx+1);
+  return {pack:'all', seed: seed || decoded};
 }
-function putSeedInHash(seedStr){
-  const encoded = encodeURIComponent(seedStr);
+function putHash(pack, seedStr){
+  const encoded = encodeURIComponent(`${pack}:${seedStr}`);
   if(location.hash.slice(1) !== encoded){
     history.replaceState(null, '', '#' + encoded);
   }
 }
 
-function newGame(mode, seedOverride){
+function newGame(mode, seedOverride, packOverride){
+  const pack = 'all';
   const seedStr = seedOverride || (mode === 'daily'
     ? `daily-${todayKey()}`
     : `random-${Date.now()}-${Math.random()}`);
-  putSeedInHash(seedStr);
+  putHash(pack, seedStr);
   const effectiveMode = seedStr.startsWith('daily-') ? 'daily' : 'random';
   const rng = mulberry32(hashSeed(seedStr));
 
+  WORD_BANK = getPackWords(pack);
   const order = seededShuffle(WORD_BANK.map((_,i)=>i), rng);
   const chosen = order.slice(0,18).map(i => WORD_BANK[i]);
 
@@ -485,6 +515,7 @@ function newGame(mode, seedOverride){
 
   state = {
     mode: effectiveMode,
+    pack,
     words,
     currentIndex: 0,
     currentInput: [],
@@ -502,6 +533,7 @@ function newGame(mode, seedOverride){
   document.getElementById('subtitle').textContent = effectiveMode === 'daily'
     ? `Heutiges Rätsel · ${todayKey()}`
     : 'Zufalls-Orbit · teile diese URL, um genau dieses Rätsel zu senden';
+  document.getElementById('packSelect').value = 'de';
 
   renderBoardShell();
   lastLogEntryEl = null;
@@ -915,24 +947,38 @@ document.addEventListener('keydown', (e)=>{
 /* ---------- Word bank loading ---------- */
 async function loadWordBank(){
   try{
-    const resp = await fetch('odenet_words.json');
+    const resp = await fetch('dewiktionary_words.json');
     if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     if(!Array.isArray(data) || data.length < 18) throw new Error('unexpected data shape');
-    WORD_BANK = data;
+    RAW_BANK = data;
   } catch(err){
-    console.warn('Could not load odenet_words.json, using compact fallback word bank instead:', err);
+    console.warn('Could not load dewiktionary_words.json, using compact fallback word bank instead:', err);
   }
 }
 
 /* ---------- Init ---------- */
+/* Cross-page nav (switching site/language via the dropdown) rebuilds the
+   hash explicitly with the chosen pack rather than just carrying the
+   current hash forward, since the destination's pack vocabulary may differ
+   from whatever pack this page currently has active. */
+function crossNav(navFile, pack){
+  const seedPart = (parseHash() || {}).seed;
+  window.location.href = seedPart ? `${navFile}#${encodeURIComponent(pack + ':' + seedPart)}` : navFile;
+}
 document.getElementById('randomBtn').addEventListener('click', ()=> newGame('random'));
-document.getElementById('langBtn').addEventListener('click', ()=>{ window.location.href = 'index.html' + location.hash; });
+document.getElementById('packSelect').addEventListener('change', (e)=>{
+  const opt = e.target.selectedOptions[0];
+  if(opt.dataset.nav){
+    crossNav(opt.dataset.nav, opt.value);
+  }
+  // selecting 'de' while already on this page is a no-op
+});
 
 loadWordBank().then(()=>{
-  const sharedSeed = seedFromHash();
-  if(sharedSeed){
-    newGame(null, sharedSeed);
+  const parsed = parseHash();
+  if(parsed && parsed.seed){
+    newGame(null, parsed.seed);
   } else {
     newGame('daily');
   }
