@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anagram Orbit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#080a16;
+    --void-2:#0d1128;
+    --panel:#11152c;
+    --panel-2:#161a36;
+    --line:#262c52;
+    --star:#eef1ff;
+    --dim:#8890c0;
+    --cyan:#6fe3ff;
+    --violet:#b18cff;
+    --gold:#ffcf6f;
+    --green:#6ef0a8;
+    --red:#ff6b6b;
+    --amber:#ffab5e;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    min-height:100vh;
+    background:var(--void);
+    color:var(--star);
+    font-family:'Inter',sans-serif;
+    overflow-x:hidden;
+    position:relative;
+  }
+  canvas#stars{
+    position:fixed; inset:0; width:100%; height:100%; z-index:0; pointer-events:none;
+  }
+  .nebula{
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(ellipse 60% 40% at 15% 10%, rgba(177,140,255,0.16), transparent 60%),
+      radial-gradient(ellipse 50% 35% at 85% 15%, rgba(111,227,255,0.12), transparent 60%),
+      radial-gradient(ellipse 55% 45% at 50% 100%, rgba(111,240,168,0.08), transparent 60%);
+  }
+  .wrap{
+    position:relative; z-index:1;
+    max-width:1080px; margin:0 auto; padding:28px 20px 80px;
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    flex-wrap:wrap; gap:16px; margin-bottom:22px;
+  }
+  .brand h1{
+    font-family:'Space Grotesk',sans-serif; font-weight:700;
+    font-size:clamp(28px,4vw,38px); margin:0; letter-spacing:0.5px;
+    background:linear-gradient(90deg,#eef1ff,var(--cyan) 60%,var(--violet));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .brand p{margin:4px 0 0; color:var(--dim); font-size:13px; letter-spacing:0.4px;}
+  .hud{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+  .mode-badge{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:1.5px;
+    padding:6px 10px; border-radius:20px; border:1px solid var(--line);
+    color:var(--cyan); background:rgba(111,227,255,0.06); text-transform:uppercase;
+  }
+  .timer{
+    font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:600;
+    padding:8px 16px; border-radius:12px; border:1px solid var(--line);
+    background:var(--panel); min-width:104px; text-align:center;
+    box-shadow:0 0 0 1px rgba(111,227,255,0.05) inset;
+  }
+  .timer.penalty-flash{animation:penalty 0.6s ease;}
+  @keyframes penalty{0%{color:var(--red);}100%{color:var(--star);}}
+  button.ghost{
+    font-family:'Inter',sans-serif; font-size:13px; font-weight:600;
+    background:transparent; color:var(--star); border:1px solid var(--line);
+    padding:9px 14px; border-radius:10px; cursor:pointer; transition:all .15s ease;
+  }
+  button.ghost:hover{border-color:var(--cyan); color:var(--cyan); background:rgba(111,227,255,0.06);}
+
+  /* ---------- Progress ---------- */
+  .progress-row{
+    display:flex; gap:6px; flex-wrap:wrap; margin-bottom:26px; justify-content:center;
+  }
+  .dot{
+    width:16px; height:16px; border-radius:50%;
+    border:1.5px solid var(--line); background:transparent;
+    transition:all .25s ease;
+  }
+  .dot.current{border-color:var(--cyan); box-shadow:0 0 10px 1px var(--cyan); animation:pulse 1.6s infinite ease-in-out;}
+  .dot.solved{background:var(--green); border-color:var(--green); box-shadow:0 0 8px rgba(110,240,168,0.6);}
+  .dot.skipped{background:var(--amber); border-color:var(--amber); box-shadow:0 0 8px rgba(255,171,94,0.5);}
+  @keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
+
+  /* ---------- Layout ---------- */
+  .board{display:flex; flex-direction:column; gap:20px;}
+
+  .card{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line); border-radius:20px; padding:28px;
+    position:relative; overflow:hidden;
+  }
+  .card::before{
+    content:''; position:absolute; top:-40%; right:-20%; width:60%; height:140%;
+    background:radial-gradient(circle,rgba(111,227,255,0.06),transparent 65%);
+    pointer-events:none;
+  }
+  .word-count{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--dim);
+    letter-spacing:2px; text-transform:uppercase; margin-bottom:18px;
+  }
+
+  /* answer slots */
+  .slots{
+    display:flex; gap:4px; justify-content:center; flex-wrap:wrap;
+    margin-bottom:26px; min-height:44px;
+  }
+  .slot{
+    width:clamp(22px,7vw,34px); height:40px; border-radius:6px;
+    border:2px dashed var(--line);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px;
+    color:var(--star); transition:all .15s ease; background:rgba(255,255,255,0.02);
+  }
+  .slot.filled{border-style:solid; border-color:var(--cyan); background:rgba(111,227,255,0.08); box-shadow:0 0 12px rgba(111,227,255,0.25);}
+  .slot.correct{
+    border-color:var(--green); background:rgba(110,240,168,0.12); box-shadow:0 0 14px rgba(110,240,168,0.35); color:var(--green);
+    animation:happyWiggle .55s ease;
+  }
+  .shake-red .slot{animation:shake .5s ease;}
+  .shake-red .slot.filled{border-color:var(--red)!important; background:rgba(255,107,107,0.12)!important; box-shadow:0 0 14px rgba(255,107,107,0.4)!important;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);}
+    20%{transform:translateX(-6px);}
+    40%{transform:translateX(6px);}
+    60%{transform:translateX(-4px);}
+    80%{transform:translateX(4px);}
+  }
+  @keyframes happyWiggle{
+    0%{transform:scale(1) rotate(0deg);}
+    25%{transform:scale(1.22) rotate(-10deg);}
+    50%{transform:scale(0.92) rotate(8deg);}
+    75%{transform:scale(1.1) rotate(-4deg);}
+    100%{transform:scale(1) rotate(0deg);}
+  }
+
+  .divider{
+    text-align:center; color:var(--dim); font-size:11px; letter-spacing:2px;
+    text-transform:uppercase; margin-bottom:20px; font-family:'IBM Plex Mono',monospace;
+  }
+
+  /* tile grid — hexagon "star nodes", fixed positions */
+  .tiles{
+    display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:24px;
+  }
+  .tile{
+    position:relative;
+    width:58px; height:58px;
+    clip-path:polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+    background:linear-gradient(145deg,#1b2044,#141834);
+    border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:22px;
+    color:var(--star);
+    transition:transform .12s ease, background .15s ease, box-shadow .15s ease;
+  }
+  .tile:hover:not(.used){transform:translateY(-3px); background:linear-gradient(145deg,#232a56,#1a1f42);}
+  .tile.used{
+    background:linear-gradient(145deg, rgba(111,227,255,0.28), rgba(177,140,255,0.18));
+    color:var(--void); box-shadow:0 0 14px rgba(111,227,255,0.45);
+  }
+  .tile.hinted{
+    background:linear-gradient(145deg, rgba(255,207,111,0.55), rgba(255,171,94,0.35));
+    color:var(--void); box-shadow:0 0 16px rgba(255,207,111,0.6);
+    cursor:default;
+  }
+  .tile.hinted:hover{transform:none;}
+  .tile.happy{animation:happyWiggle .55s ease;}
+  .tile.hinted .badge{background:var(--gold);}
+  .tile .badge{
+    position:absolute; top:-6px; right:-2px;
+    width:16px; height:16px; border-radius:50%;
+    background:var(--cyan); color:var(--void);
+    font-family:'IBM Plex Mono',monospace; font-size:9px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  .actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:6px;}
+  .actions button{
+    font-family:'Inter',sans-serif; font-size:13px; font-weight:600;
+    padding:10px 16px; border-radius:10px; cursor:pointer;
+    border:1px solid var(--line); background:rgba(255,255,255,0.02); color:var(--star);
+    transition:all .15s ease;
+  }
+  .actions button:hover:not(:disabled){border-color:var(--gold); color:var(--gold);}
+  .actions button:disabled{opacity:0.35; cursor:not-allowed;}
+  .actions button.skip:hover:not(:disabled){border-color:var(--red); color:var(--red);}
+
+  /* definition reveal */
+  .reveal{
+    margin-top:22px; padding:18px 20px; border-radius:14px;
+    background:rgba(110,240,168,0.08); border:1px solid rgba(110,240,168,0.35);
+    display:none;
+  }
+  .reveal.show{display:block; animation:fadeup .35s ease;}
+  @keyframes fadeup{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+  .reveal .rword{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:19px; color:var(--green);
+    letter-spacing:1px; margin-bottom:4px;
+  }
+  .reveal .rdef{color:var(--star); font-size:14px; line-height:1.5; opacity:0.9;}
+  .reveal .rmeta{margin-top:10px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim);}
+  .reveal button{
+    margin-top:14px; background:var(--green); color:#06210f; border:none;
+    padding:9px 16px; border-radius:9px; font-weight:700; font-size:13px; cursor:pointer;
+  }
+
+  .skip-reveal{
+    margin-top:22px; padding:18px 20px; border-radius:14px;
+    background:rgba(255,171,94,0.08); border:1px solid rgba(255,171,94,0.35);
+    display:none;
+  }
+  .skip-reveal.show{display:block; animation:fadeup .35s ease;}
+  .skip-reveal .rword{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:19px; color:var(--amber);}
+  .skip-reveal .rdef{color:var(--star); font-size:14px; margin-top:4px; opacity:0.9;}
+
+  .def-hint{
+    margin-top:18px; padding:14px 18px; border-radius:14px;
+    background:rgba(177,140,255,0.08); border:1px solid rgba(177,140,255,0.35);
+    display:none;
+  }
+  .def-hint.show{display:block; animation:fadeup .35s ease;}
+  .def-hint .dh-label{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:1.5px;
+    text-transform:uppercase; color:var(--violet); margin-bottom:4px;
+  }
+  .def-hint .dh-text{color:var(--star); font-size:14px; line-height:1.5; opacity:0.9;}
+
+  /* ---------- History panel ---------- */
+  .log{
+    background:var(--panel); border:1px solid var(--line); border-radius:20px;
+    padding:18px 20px; max-height:260px; display:flex; flex-direction:column;
+  }
+  .log h3{
+    margin:0 0 4px; font-family:'Space Grotesk',sans-serif; font-size:15px; letter-spacing:1px;
+    text-transform:uppercase; color:var(--dim);
+  }
+  .log .sub{font-size:11px; color:var(--dim); margin-bottom:14px; font-family:'IBM Plex Mono',monospace;}
+  .log-list{overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:10px; padding-right:4px;}
+  .log-list::-webkit-scrollbar{width:6px;}
+  .log-list::-webkit-scrollbar-thumb{background:var(--line); border-radius:6px;}
+  .log-entry{
+    border:1px solid var(--line); border-radius:12px; padding:10px 12px;
+    background:rgba(255,255,255,0.02);
+  }
+  .log-entry.skip{border-color:rgba(255,171,94,0.4); background:rgba(255,171,94,0.05);}
+  .log-entry .lw{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .log-entry .lw span.tag{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:500;
+    padding:2px 6px; border-radius:6px;
+  }
+  .log-entry.win .lw span.tag{background:rgba(110,240,168,0.15); color:var(--green);}
+  .log-entry.skip .lw span.tag{background:rgba(255,171,94,0.15); color:var(--amber);}
+  .log-entry .ld{font-size:12px; color:var(--dim); margin-top:4px; line-height:1.4;}
+  .log-empty{color:var(--dim); font-size:13px; text-align:center; padding:30px 10px; font-style:italic;}
+
+  /* ---------- End screen ---------- */
+  .end-card{text-align:center;}
+  .end-card .big-time{
+    font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:52px; color:var(--cyan);
+    text-shadow:0 0 24px rgba(111,227,255,0.5); margin:8px 0 4px;
+  }
+  .end-card p.tag{color:var(--dim); font-size:13px; letter-spacing:1px; text-transform:uppercase;}
+  .end-stats{display:flex; gap:24px; justify-content:center; margin:22px 0; flex-wrap:wrap;}
+  .end-stats div{text-align:center;}
+  .end-stats .n{font-family:'Space Grotesk',sans-serif; font-size:24px; font-weight:700;}
+  .end-stats .l{font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px;}
+  .end-actions{display:flex; gap:12px; justify-content:center; margin-top:18px; flex-wrap:wrap;}
+  .end-actions button{
+    font-family:'Inter',sans-serif; font-weight:700; font-size:14px;
+    padding:12px 22px; border-radius:12px; cursor:pointer; border:none;
+  }
+  .end-actions .primary{background:linear-gradient(90deg,var(--cyan),var(--violet)); color:#08091a;}
+  .end-actions .secondary{background:transparent; border:1px solid var(--line); color:var(--star);}
+
+  .sparkle-layer{
+    position:fixed; inset:0; z-index:5; pointer-events:none; overflow:hidden;
+  }
+  .spark{
+    position:absolute; left:50%; top:38%;
+    clip-path:polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%);
+    opacity:0;
+    animation-name:sparkleBurst;
+    animation-timing-function:cubic-bezier(.2,.8,.3,1);
+    animation-fill-mode:forwards;
+  }
+  @keyframes sparkleBurst{
+    0%{transform:translate(-50%,-50%) scale(0) rotate(0deg); opacity:0;}
+    12%{opacity:1;}
+    100%{
+      transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1) rotate(340deg);
+      opacity:0;
+    }
+  }
+
+  .sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0);}
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none!important; transition:none!important;}
+  }
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div class="nebula"></div>
+<div class="sparkle-layer" id="sparkleLayer"></div>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>Anagram Orbit</h1>
+      <p id="subtitle">Unscramble 18 words. Chart your fastest orbit.</p>
+    </div>
+    <div class="hud">
+      <span class="mode-badge" id="modeBadge">DAILY</span>
+      <div class="timer" id="timer">00:00</div>
+      <button class="ghost" id="randomBtn">New Random Game</button>
+    </div>
+  </header>
+
+  <div class="progress-row" id="progressRow"></div>
+
+  <div class="board" id="board"></div>
+</div>
+
+<script>
+/* ============ Starfield background ============ */
+(function(){
+  const canvas = document.getElementById('stars');
+  const ctx = canvas.getContext('2d');
+  let w,h,stars=[];
+  function resize(){
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+    const count = Math.floor((w*h)/9000);
+    stars = Array.from({length:count},()=>({
+      x:Math.random()*w, y:Math.random()*h,
+      r:Math.random()*1.3+0.3,
+      phase:Math.random()*Math.PI*2,
+      speed:Math.random()*0.02+0.008
+    }));
+  }
+  function draw(t){
+    ctx.clearRect(0,0,w,h);
+    for(const s of stars){
+      const tw = 0.55 + Math.sin(t*s.speed + s.phase)*0.45;
+      ctx.beginPath();
+      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fillStyle = `rgba(238,241,255,${tw.toFixed(2)})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  requestAnimationFrame(draw);
+})();
+
+/* ============ Word bank ============ */
+const WORD_BANK = [
+  ["GALAXY","a vast system of stars, gas, and dust bound together by gravity"],
+  ["NEBULA","a giant interstellar cloud of dust and gas, often where stars are born"],
+  ["ORBIT","the curved path an object follows around a star, planet, or moon"],
+  ["COMET","an icy body that glows and grows a tail as it nears the sun"],
+  ["METEOR","a streak of light from debris burning up in a planet's atmosphere"],
+  ["PLANET","a large celestial body that orbits a star and has cleared its path"],
+  ["ROCKET","a vehicle propelled forward by expelling exhaust gases"],
+  ["SHUTTLE","a reusable spacecraft designed for repeated trips to orbit"],
+  ["ASTEROID","a small rocky body, smaller than a planet, orbiting the sun"],
+  ["GRAVITY","the force that pulls objects toward one another"],
+  ["HORIZON","the line where the sky appears to meet the land or sea"],
+  ["CRATER","a bowl-shaped hollow formed by an impact or explosion"],
+  ["ECLIPSE","the blocking of light from one celestial body by another"],
+  ["VOYAGE","a long journey, especially by sea, air, or through space"],
+  ["CAPSULE","a small sealed compartment, often used to carry a crew"],
+  ["SATELLITE","an object that orbits a planet, natural or human-made"],
+  ["TELESCOPE","an instrument used to view distant objects in detail"],
+  ["UNIVERSE","all of space, time, matter, and energy that exists"],
+  ["COSMOS","the universe considered as a vast, orderly, harmonious system"],
+  ["STARDUST","fine particles of matter scattered by dying stars"],
+  ["LAUNCH","to send a vehicle or object forcefully into flight"],
+  ["MODULE","a self-contained unit that forms part of a larger structure"],
+  ["VACUUM","a space entirely empty of matter"],
+  ["ASTRONAUT","a person trained to travel and work in space"],
+  ["QUASAR","an extremely bright, distant object powered by a black hole"],
+  ["PULSAR","a spinning neutron star that emits regular pulses of radiation"],
+  ["NOVA","a star that suddenly flares to many times its normal brightness"],
+  ["ZENITH","the point in the sky directly above an observer"],
+  ["AURORA","a natural display of colored light in the polar sky"],
+  ["EQUATOR","the imaginary line circling a planet midway between its poles"],
+  ["LANDING","the act of arriving safely on a surface after flight"],
+  ["MISSION","an important task or expedition with a defined goal"],
+  ["STATION","a fixed base or outpost built for a particular purpose"],
+  ["VOYAGER","one who sets out on a long or adventurous journey"],
+  ["CRYSTAL","a clear, solid mineral with a regular repeating structure"],
+  ["SIGNAL","information sent as a sound, light, or radio transmission"],
+  ["ANTENNA","a device used to send or receive radio signals"],
+  ["PAYLOAD","the cargo or equipment carried by a vehicle or rocket"],
+  ["THRUSTER","a small engine used to steer or adjust a craft's motion"],
+  ["ECLIPTIC","the apparent path the sun traces across the sky each year"],
+  ["METEORITE","a fragment of rock or metal that survives to hit the ground"],
+  ["CONSTELLATION","a recognized group of stars forming a pattern"]
+];
+
+/* ============ Seeded RNG (mulberry32) ============ */
+function hashSeed(str){
+  let h = 1779033703 ^ str.length;
+  for(let i=0;i<str.length;i++){
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return (h ^ (h >>> 16)) >>> 0;
+}
+function mulberry32(a){
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function seededShuffle(arr, rng){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(rng()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+function shuffleLetters(word, rng){
+  const letters = word.split('');
+  let shuffled;
+  let tries = 0;
+  do{
+    shuffled = seededShuffle(letters, rng);
+    tries++;
+  } while(shuffled.join('') === word && tries < 12);
+  return shuffled.map((ch,i)=>({ch, id:i, used:false}));
+}
+
+/* ============ Game state ============ */
+let state = null;
+let timerHandle = null;
+let lastLogEntryEl = null;
+
+/* Gradient run from the first letter picked (cyan) to the last (violet).
+   Works purely off click ORDER/position, never off which physical tile —
+   so duplicate letters (e.g. the two A's in GALAXY) are completely
+   interchangeable: correctness and coloring both key off the character
+   and the position it was placed in, never off a specific tile id. */
+const GRADIENT_FROM = [111,227,255];
+const GRADIENT_TO = [177,140,255];
+function gradientColor(pos, total){
+  const t = total > 1 ? pos/(total-1) : 0;
+  return GRADIENT_FROM.map((c,i) => Math.round(c + (GRADIENT_TO[i]-c)*t));
+}
+
+function todayKey(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function newGame(mode){
+  const seedStr = mode === 'daily'
+    ? `daily-${todayKey()}`
+    : `random-${Date.now()}-${Math.random()}`;
+  const rng = mulberry32(hashSeed(seedStr));
+
+  const order = seededShuffle(WORD_BANK.map((_,i)=>i), rng);
+  const chosen = order.slice(0,18).map(i => WORD_BANK[i]);
+
+  const words = chosen.map(([word, def]) => ({
+    word, def,
+    letters: shuffleLetters(word, rng)
+  }));
+
+  state = {
+    mode,
+    words,
+    currentIndex: 0,
+    currentInput: [],
+    hintUsed: false,
+    defUsed: false,
+    startTime: Date.now(),
+    penaltySeconds: 0,
+    wordStartTime: Date.now(),
+    solved: [],
+    finished: false,
+    waitingForNext: false
+  };
+
+  document.getElementById('modeBadge').textContent = mode === 'daily' ? 'DAILY' : 'RANDOM';
+  document.getElementById('subtitle').textContent = mode === 'daily'
+    ? `Today's puzzle · ${todayKey()}`
+    : 'Random orbit · unique letters every run';
+
+  renderBoardShell();
+  lastLogEntryEl = null;
+  renderProgress();
+  setupWord(0);
+  startTimer();
+}
+
+function renderBoardShell(){
+  // Always rebuild the board fresh (covers the very first load and
+  // returning here after an end screen) and (re)attach every listener,
+  // so buttons never end up wired to stale or missing elements.
+  document.getElementById('board').innerHTML = `
+    <div class="log">
+      <h3>Mission Log</h3>
+      <div class="sub" id="logSub">0 / 18 charted</div>
+      <div class="log-list" id="logList">
+        <div class="log-empty">Solved words will appear here as you go.</div>
+      </div>
+    </div>
+    <div class="card" id="puzzleCard">
+      <div class="word-count" id="wordCount">WORD 1 / 18</div>
+      <div class="slots" id="slots"></div>
+      <div class="divider">select the letters, in order</div>
+      <div class="tiles" id="tiles"></div>
+      <div class="actions">
+        <button id="hintBtn" type="button">✦ First letter <span style="color:var(--dim)">(+0:30)</span></button>
+        <button id="defBtn" type="button">◈ Reveal definition <span style="color:var(--dim)">(+1:00)</span></button>
+        <button class="skip" id="skipBtn" type="button">⤳ Skip word <span style="color:var(--dim)">(+2:00)</span></button>
+      </div>
+      <div class="def-hint" id="defHint">
+        <div class="dh-label">Definition</div>
+        <div class="dh-text" id="defHintText"></div>
+      </div>
+      <div class="reveal" id="reveal">
+        <div class="rword" id="revealWord"></div>
+        <div class="rdef" id="revealDef"></div>
+        <div class="rmeta" id="revealMeta"></div>
+        <button id="nextBtn" type="button">Next word →</button>
+      </div>
+      <div class="skip-reveal" id="skipReveal">
+        <div class="rword" id="skipWord"></div>
+        <div class="rdef" id="skipDef"></div>
+      </div>
+    </div>`;
+
+  document.getElementById('hintBtn').addEventListener('click', useHint);
+  document.getElementById('defBtn').addEventListener('click', useDefinitionHint);
+  document.getElementById('skipBtn').addEventListener('click', useSkip);
+  document.getElementById('nextBtn').addEventListener('click', ()=> advanceWord());
+}
+
+/* ---------- Rendering ---------- */
+function currentWordObj(){ return state.words[state.currentIndex]; }
+
+function setupWord(i){
+  state.currentIndex = i;
+  state.currentInput = [];
+  state.hintUsed = false;
+  state.defUsed = false;
+  state.wordStartTime = Date.now();
+  state.waitingForNext = false;
+  const w = currentWordObj();
+  w.letters.forEach(t => t.used = false);
+
+  document.getElementById('wordCount').textContent = `WORD ${i+1} / 18`;
+  document.getElementById('reveal').classList.remove('show');
+  document.getElementById('skipReveal').classList.remove('show');
+  document.getElementById('defHint').classList.remove('show');
+  document.getElementById('hintBtn').disabled = false;
+  document.getElementById('defBtn').disabled = false;
+  document.getElementById('skipBtn').disabled = false;
+
+  renderTiles();
+  renderSlots();
+  renderProgress();
+}
+
+function renderTiles(){
+  const box = document.getElementById('tiles');
+  box.innerHTML = '';
+  const w = currentWordObj();
+  w.letters.forEach(tile => {
+    const btn = document.createElement('button');
+    btn.className = 'tile' + (tile.used ? ' used' : '') + (tile.hinted ? ' hinted' : '');
+    btn.type = 'button';
+    btn.setAttribute('aria-label', tile.hinted ? `letter ${tile.ch}, revealed, locked` : `letter ${tile.ch}`);
+    btn.textContent = tile.ch;
+    if(tile.used){
+      const pos = state.currentInput.indexOf(tile.id);
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = pos + 1;
+      btn.appendChild(badge);
+      if(!tile.hinted){
+        const [r,g,b] = gradientColor(pos, w.word.length);
+        btn.style.background = `linear-gradient(145deg, rgba(${r},${g},${b},0.95), rgba(${r},${g},${b},0.5))`;
+        btn.style.boxShadow = `0 0 14px rgba(${r},${g},${b},0.55)`;
+      }
+    }
+    btn.addEventListener('click', () => selectTile(tile.id));
+    box.appendChild(btn);
+  });
+}
+
+function renderSlots(){
+  const box = document.getElementById('slots');
+  box.innerHTML = '';
+  const w = currentWordObj();
+  for(let i=0;i<w.word.length;i++){
+    const slot = document.createElement('div');
+    const tileId = state.currentInput[i];
+    if(tileId !== undefined){
+      const tile = w.letters.find(t=>t.id===tileId);
+      slot.className = 'slot filled';
+      slot.textContent = tile.ch;
+      if(tile.hinted){
+        slot.style.borderColor = 'var(--gold)';
+        slot.style.background = 'rgba(255,207,111,0.15)';
+        slot.style.boxShadow = '0 0 12px rgba(255,207,111,0.4)';
+      } else {
+        const [r,g,b] = gradientColor(i, w.word.length);
+        slot.style.borderColor = `rgb(${r},${g},${b})`;
+        slot.style.background = `rgba(${r},${g},${b},0.15)`;
+        slot.style.boxShadow = `0 0 12px rgba(${r},${g},${b},0.35)`;
+      }
+    } else {
+      slot.className = 'slot';
+    }
+    box.appendChild(slot);
+  }
+}
+
+function renderProgress(){
+  const row = document.getElementById('progressRow');
+  row.innerHTML = '';
+  for(let i=0;i<state.words.length;i++){
+    const d = document.createElement('div');
+    const solvedEntry = state.solved.find(s=>s.index===i);
+    let cls = 'dot';
+    if(solvedEntry) cls += solvedEntry.skipped ? ' skipped' : ' solved';
+    else if(i === state.currentIndex && !state.finished) cls += ' current';
+    d.className = cls;
+    d.title = `Word ${i+1}`;
+    row.appendChild(d);
+  }
+}
+
+/* ---------- Interaction ---------- */
+function selectTile(tileId){
+  if(state.waitingForNext || state.finished) return;
+  const w = currentWordObj();
+  const tile = w.letters.find(t=>t.id===tileId);
+
+  if(tile.used){
+    if(tile.hinted) return; // revealed letters are locked in place
+    // remove this tile and every tile selected after it
+    const pos = state.currentInput.indexOf(tileId);
+    const removed = state.currentInput.slice(pos);
+    state.currentInput = state.currentInput.slice(0,pos);
+    removed.forEach(id => { w.letters.find(t=>t.id===id).used = false; });
+  } else {
+    tile.used = true;
+    state.currentInput.push(tileId);
+  }
+
+  renderTiles();
+  renderSlots();
+
+  if(state.currentInput.length === w.word.length){
+    checkAnswer();
+  }
+}
+
+function checkAnswer(){
+  const w = currentWordObj();
+  const guess = state.currentInput.map(id => w.letters.find(t=>t.id===id).ch).join('');
+  if(guess === w.word){
+    handleCorrect();
+  } else {
+    handleWrong();
+  }
+}
+
+function handleWrong(){
+  state.waitingForNext = true;
+  document.getElementById('slots').parentElement.classList.add('shake-red');
+  setTimeout(() => {
+    document.getElementById('slots').parentElement.classList.remove('shake-red');
+    const w = currentWordObj();
+    const hinted = w.letters.find(t => t.hinted);
+    w.letters.forEach(t => { if(!t.hinted) t.used = false; });
+    state.currentInput = hinted ? [hinted.id] : [];
+    state.waitingForNext = false;
+    renderTiles();
+    renderSlots();
+  }, 550);
+}
+
+function handleCorrect(){
+  const w = currentWordObj();
+  const timeTaken = Math.max(0, Math.round((Date.now() - state.wordStartTime)/1000));
+  state.solved.push({index: state.currentIndex, word:w.word, def:w.def, skipped:false, timeTaken});
+
+  // happy wiggle, staggered left-to-right across the slots...
+  document.querySelectorAll('#slots .slot').forEach((s,i) => {
+    s.removeAttribute('style');
+    s.classList.add('correct');
+    s.style.animationDelay = `${i*45}ms`;
+  });
+  // ...and the tiles they came from, matched by click order.
+  const tileEls = document.querySelectorAll('#tiles .tile');
+  state.currentInput.forEach((tileId, i) => {
+    const idx = w.letters.findIndex(t => t.id === tileId);
+    const el = tileEls[idx];
+    if(el){
+      el.classList.add('happy');
+      el.style.animationDelay = `${i*45}ms`;
+    }
+  });
+
+  renderProgress();
+  addLogEntry(w.word, w.def, false, timeTaken);
+
+  document.getElementById('revealWord').textContent = w.word;
+  document.getElementById('revealDef').textContent = w.def;
+  document.getElementById('revealMeta').textContent = `solved in ${formatTime(timeTaken)}`;
+  document.getElementById('reveal').classList.add('show');
+  document.getElementById('hintBtn').disabled = true;
+  document.getElementById('defBtn').disabled = true;
+  document.getElementById('skipBtn').disabled = true;
+  state.waitingForNext = true;
+
+  clearTimeout(window._autoAdvance);
+  window._autoAdvance = setTimeout(()=> advanceWord(), 800);
+}
+
+function advanceWord(){
+  clearTimeout(window._autoAdvance);
+  const next = state.currentIndex + 1;
+  if(next >= state.words.length){
+    finishGame();
+  } else {
+    setupWord(next);
+    if(lastLogEntryEl){
+      lastLogEntryEl.scrollIntoView({behavior:'smooth', block:'start'});
+    }
+  }
+}
+
+function useHint(){
+  if(state.hintUsed || state.waitingForNext || state.finished) return;
+  const w = currentWordObj();
+  // reset any current partial input first
+  w.letters.forEach(t => t.used = false);
+  state.currentInput = [];
+  const firstTile = w.letters.find(t => t.ch === w.word[0]);
+  firstTile.used = true;
+  firstTile.hinted = true;
+  state.currentInput.push(firstTile.id);
+
+  state.hintUsed = true;
+  state.penaltySeconds += 30;
+  flashPenalty();
+  document.getElementById('hintBtn').disabled = true;
+
+  renderTiles();
+  renderSlots();
+  if(state.currentInput.length === w.word.length) checkAnswer();
+}
+
+function useDefinitionHint(){
+  if(state.defUsed || state.waitingForNext || state.finished) return;
+  const w = currentWordObj();
+  state.defUsed = true;
+  state.penaltySeconds += 60;
+  flashPenalty();
+  document.getElementById('defBtn').disabled = true;
+  document.getElementById('defHintText').textContent = w.def;
+  document.getElementById('defHint').classList.add('show');
+}
+
+function useSkip(){
+  if(state.waitingForNext || state.finished) return;
+  const w = currentWordObj();
+  state.penaltySeconds += 120;
+  flashPenalty();
+  state.solved.push({index: state.currentIndex, word:w.word, def:w.def, skipped:true, timeTaken:null});
+  renderProgress();
+  addLogEntry(w.word, w.def, true, null);
+
+  document.getElementById('skipWord').textContent = w.word;
+  document.getElementById('skipDef').textContent = w.def;
+  document.getElementById('skipReveal').classList.add('show');
+  document.getElementById('hintBtn').disabled = true;
+  document.getElementById('defBtn').disabled = true;
+  document.getElementById('skipBtn').disabled = true;
+  state.waitingForNext = true;
+
+  clearTimeout(window._autoAdvance);
+  window._autoAdvance = setTimeout(()=> advanceWord(), 1000);
+}
+
+function flashPenalty(){
+  const t = document.getElementById('timer');
+  t.classList.remove('penalty-flash');
+  void t.offsetWidth;
+  t.classList.add('penalty-flash');
+}
+
+/* ---------- Mission log ---------- */
+function addLogEntry(word, def, skipped, timeTaken){
+  const list = document.getElementById('logList');
+  const empty = list.querySelector('.log-empty');
+  if(empty) empty.remove();
+
+  const entry = document.createElement('div');
+  entry.className = 'log-entry ' + (skipped ? 'skip' : 'win');
+  entry.innerHTML = `
+    <div class="lw"><span>${word}</span><span class="tag">${skipped ? 'SKIPPED' : formatTime(timeTaken)}</span></div>
+    <div class="ld">${def}</div>`;
+  list.appendChild(entry);
+  list.scrollTop = list.scrollHeight;
+  lastLogEntryEl = entry;
+  document.getElementById('logSub').textContent = `${state.solved.length} / ${state.words.length} charted`;
+}
+
+/* ---------- Timer ---------- */
+function formatTime(totalSeconds){
+  const m = Math.floor(totalSeconds/60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function startTimer(){
+  clearInterval(timerHandle);
+  timerHandle = setInterval(()=>{
+    if(state.finished) return;
+    const elapsed = Math.floor((Date.now() - state.startTime)/1000) + state.penaltySeconds;
+    document.getElementById('timer').textContent = formatTime(elapsed);
+  }, 250);
+}
+
+/* ---------- End screen ---------- */
+const SPARK_COLORS = ['var(--cyan)','var(--violet)','var(--gold)','var(--green)'];
+function launchSparkles(count){
+  count = count || 90;
+  const layer = document.getElementById('sparkleLayer');
+  layer.innerHTML = '';
+  for(let i=0;i<count;i++){
+    const s = document.createElement('div');
+    s.className = 'spark';
+    const angle = Math.random()*Math.PI*2;
+    const dist = 22 + Math.random()*46; // vmin
+    const size = 5 + Math.random()*8;
+    s.style.setProperty('--dx', `${Math.cos(angle)*dist}vmin`);
+    s.style.setProperty('--dy', `${Math.sin(angle)*dist}vmin`);
+    s.style.width = `${size}px`;
+    s.style.height = `${size}px`;
+    s.style.background = SPARK_COLORS[Math.floor(Math.random()*SPARK_COLORS.length)];
+    s.style.boxShadow = `0 0 ${Math.round(size)}px currentColor`;
+    s.style.animationDuration = `${1.1 + Math.random()*0.9}s`;
+    s.style.animationDelay = `${Math.random()*0.35}s`;
+    layer.appendChild(s);
+  }
+  setTimeout(() => { layer.innerHTML = ''; }, 2600);
+}
+
+function finishGame(){
+  state.finished = true;
+  clearInterval(timerHandle);
+  renderProgress();
+  launchSparkles();
+  const totalElapsed = Math.floor((Date.now() - state.startTime)/1000) + state.penaltySeconds;
+  document.getElementById('timer').textContent = formatTime(totalElapsed);
+
+  const solvedCount = state.solved.filter(s=>!s.skipped).length;
+  const skippedCount = state.solved.filter(s=>s.skipped).length;
+  const hintPenalty = state.penaltySeconds; // includes both hint+skip penalties combined
+
+  const board = document.getElementById('board');
+  board.innerHTML = `
+    <div class="card end-card">
+      <p class="tag">Orbit complete</p>
+      <div class="big-time">${formatTime(totalElapsed)}</div>
+      <p class="tag">total time, including penalties</p>
+      <div class="end-stats">
+        <div><div class="n" style="color:var(--green)">${solvedCount}</div><div class="l">Solved</div></div>
+        <div><div class="n" style="color:var(--amber)">${skippedCount}</div><div class="l">Skipped</div></div>
+        <div><div class="n" style="color:var(--cyan)">+${formatTime(hintPenalty)}</div><div class="l">Penalties</div></div>
+      </div>
+      <div class="end-actions">
+        <button class="primary" id="playRandomAgain">Play a random game</button>
+        <button class="secondary" id="reviewBtn">Review words below</button>
+      </div>
+    </div>
+    <div class="log" style="max-height:none;">
+      <h3>Full Mission Log</h3>
+      <div class="sub">Scroll to review every word from this run</div>
+      <div class="log-list" id="finalLogList" style="max-height:520px;"></div>
+    </div>
+  `;
+  const finalList = document.getElementById('finalLogList');
+  state.words.forEach((w, i) => {
+    const rec = state.solved.find(s=>s.index===i);
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + (rec && rec.skipped ? 'skip' : 'win');
+    const tag = rec ? (rec.skipped ? 'SKIPPED' : formatTime(rec.timeTaken)) : '—';
+    entry.innerHTML = `
+      <div class="lw"><span>${i+1}. ${w.word}</span><span class="tag">${tag}</span></div>
+      <div class="ld">${w.def}</div>`;
+    finalList.appendChild(entry);
+  });
+
+  document.getElementById('playRandomAgain').addEventListener('click', ()=> newGame('random'));
+  document.getElementById('reviewBtn').addEventListener('click', ()=>{
+    finalList.scrollIntoView({behavior:'smooth', block:'start'});
+  });
+}
+
+/* ---------- Keyboard support ---------- */
+document.addEventListener('keydown', (e)=>{
+  if(!state || state.finished || state.waitingForNext) return;
+  if(e.key === 'Backspace' && state.currentInput.length){
+    const lastId = state.currentInput[state.currentInput.length-1];
+    selectTile(lastId);
+  }
+});
+
+/* ---------- Init ---------- */
+document.getElementById('randomBtn').addEventListener('click', ()=> newGame('random'));
+
+newGame('daily');
+</script>
+</body>
+</html>
