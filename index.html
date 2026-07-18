@@ -450,10 +450,28 @@ function todayKey(){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-function newGame(mode){
-  const seedStr = mode === 'daily'
+/* The seed string lives in the URL hash so a puzzle can be shared by
+   copying the link — whoever opens it gets the exact same words in the
+   exact same shuffled order. `mode` only matters to pick a fresh seed;
+   once a seed exists, DAILY vs RANDOM labeling is derived from it. */
+function seedFromHash(){
+  const raw = location.hash.slice(1);
+  if(!raw) return null;
+  try{ return decodeURIComponent(raw); } catch(e){ return null; }
+}
+function putSeedInHash(seedStr){
+  const encoded = encodeURIComponent(seedStr);
+  if(location.hash.slice(1) !== encoded){
+    history.replaceState(null, '', '#' + encoded);
+  }
+}
+
+function newGame(mode, seedOverride){
+  const seedStr = seedOverride || (mode === 'daily'
     ? `daily-${todayKey()}`
-    : `random-${Date.now()}-${Math.random()}`;
+    : `random-${Date.now()}-${Math.random()}`);
+  putSeedInHash(seedStr);
+  const effectiveMode = seedStr.startsWith('daily-') ? 'daily' : 'random';
   const rng = mulberry32(hashSeed(seedStr));
 
   const order = seededShuffle(WORD_BANK.map((_,i)=>i), rng);
@@ -465,7 +483,7 @@ function newGame(mode){
   }));
 
   state = {
-    mode,
+    mode: effectiveMode,
     words,
     currentIndex: 0,
     currentInput: [],
@@ -479,10 +497,10 @@ function newGame(mode){
     waitingForNext: false
   };
 
-  document.getElementById('modeBadge').textContent = mode === 'daily' ? 'DAILY' : 'RANDOM';
-  document.getElementById('subtitle').textContent = mode === 'daily'
+  document.getElementById('modeBadge').textContent = effectiveMode === 'daily' ? 'DAILY' : 'RANDOM';
+  document.getElementById('subtitle').textContent = effectiveMode === 'daily'
     ? `Today's puzzle · ${todayKey()}`
-    : 'Random orbit · unique letters every run';
+    : 'Random orbit · share this URL to send this exact puzzle';
 
   renderBoardShell();
   lastLogEntryEl = null;
@@ -909,7 +927,14 @@ async function loadWordBank(){
 /* ---------- Init ---------- */
 document.getElementById('randomBtn').addEventListener('click', ()=> newGame('random'));
 
-loadWordBank().then(()=> newGame('daily'));
+loadWordBank().then(()=>{
+  const sharedSeed = seedFromHash();
+  if(sharedSeed){
+    newGame(null, sharedSeed);
+  } else {
+    newGame('daily');
+  }
+});
 </script>
 </body>
 </html>
