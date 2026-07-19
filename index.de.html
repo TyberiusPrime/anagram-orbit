@@ -560,6 +560,7 @@ function renderBoardShell(){
       <div class="divider">wähle die Buchstaben, in der richtigen Reihenfolge</div>
       <div class="tiles" id="tiles"></div>
       <div class="actions">
+        <button id="shuffleBtn" type="button">⤮ Mischen <span style="color:var(--dim)">(kostenlos)</span></button>
         <button id="hintBtn" type="button">✦ Erster Buchstabe <span style="color:var(--dim)">(+0:30)</span></button>
         <button id="defBtn" type="button">◈ Definition zeigen <span style="color:var(--dim)">(+1:00)</span></button>
         <button class="skip" id="skipBtn" type="button">⤳ Wort überspringen <span style="color:var(--dim)">(+2:00)</span></button>
@@ -570,6 +571,7 @@ function renderBoardShell(){
       </div>
     </div>`;
 
+  document.getElementById('shuffleBtn').addEventListener('click', useShuffle);
   document.getElementById('hintBtn').addEventListener('click', useHint);
   document.getElementById('defBtn').addEventListener('click', useDefinitionHint);
   document.getElementById('skipBtn').addEventListener('click', useSkip);
@@ -768,6 +770,16 @@ function advanceWord(){
   }
 }
 
+function useShuffle(){
+  if(state.waitingForNext || state.finished) return;
+  const w = currentWordObj();
+  for(let i = w.letters.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [w.letters[i], w.letters[j]] = [w.letters[j], w.letters[i]];
+  }
+  renderTiles();
+}
+
 function useHint(){
   if(state.hintUsed || state.waitingForNext || state.finished) return;
   const w = currentWordObj();
@@ -936,11 +948,52 @@ function finishGame(){
 }
 
 /* ---------- Keyboard support ---------- */
+/* Pressing a letter key selects the next unselected tile matching that
+   letter (in tile order). If every matching tile is already selected,
+   it unselects the earliest-picked one instead (mirrors clicking it),
+   which also un-does anything selected after it. */
+function letterKeyPress(letter){
+  const w = currentWordObj();
+  const matches = w.letters.filter(t => t.ch.toUpperCase() === letter);
+  if(!matches.length) return;
+  const unused = matches.find(t => !t.used);
+  if(unused){
+    selectTile(unused.id);
+    return;
+  }
+  const selectable = matches.filter(t => !t.hinted);
+  if(!selectable.length) return;
+  let first = null, firstPos = Infinity;
+  for(const t of selectable){
+    const pos = state.currentInput.indexOf(t.id);
+    if(pos !== -1 && pos < firstPos){ first = t; firstPos = pos; }
+  }
+  if(first) selectTile(first.id);
+}
+
 document.addEventListener('keydown', (e)=>{
   if(!state || state.finished || state.waitingForNext) return;
   if(e.key === 'Backspace' && state.currentInput.length){
     const lastId = state.currentInput[state.currentInput.length-1];
     selectTile(lastId);
+    return;
+  }
+  if(e.key === 'Escape'){
+    const w = currentWordObj();
+    const hinted = w.letters.find(t => t.hinted);
+    w.letters.forEach(t => { if(!t.hinted) t.used = false; });
+    state.currentInput = hinted ? [hinted.id] : [];
+    renderTiles();
+    renderSlots();
+    return;
+  }
+  if(e.key === '1'){ useShuffle(); return; }
+  if(e.key === '2'){ useHint(); return; }
+  if(e.key === '3'){ useDefinitionHint(); return; }
+  if(e.key === '4'){ useSkip(); return; }
+  if(e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey){
+    const letter = e.key.toUpperCase();
+    if(/^[A-ZÄÖÜẞ]$/.test(letter)) letterKeyPress(letter);
   }
 });
 
