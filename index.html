@@ -53,14 +53,6 @@
       radial-gradient(ellipse 45% 35% at 15% 75%, rgba(255,207,111,0.16), transparent 60%);
     filter:blur(80px);
     mix-blend-mode:screen;
-    animation:auroraDrift 26s ease-in-out infinite alternate;
-  }
-  @keyframes auroraDrift{
-    0%{ transform:translate3d(-16%,-12%,0) rotate(0deg) scale(1); }
-    25%{ transform:translate3d(14%,10%,0) rotate(5deg) scale(1.18); }
-    50%{ transform:translate3d(-12%,16%,0) rotate(-4deg) scale(0.88); }
-    75%{ transform:translate3d(16%,-10%,0) rotate(4deg) scale(1.15); }
-    100%{ transform:translate3d(-14%,12%,0) rotate(-5deg) scale(1); }
   }
   .wrap{
     position:relative; z-index:1;
@@ -132,8 +124,8 @@
   .board{display:flex; flex-direction:column; gap:20px;}
 
   .card{
-    background:linear-gradient(180deg, rgba(17,21,44,0.6), rgba(22,26,54,0.6));
-    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+    background:linear-gradient(180deg, rgba(17,21,44,0.32), rgba(22,26,54,0.32));
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
     border:1px solid var(--line); border-radius:20px; padding:28px;
     position:relative; overflow:hidden;
   }
@@ -249,8 +241,8 @@
 
   /* ---------- History panel ---------- */
   .log{
-    background:rgba(17,21,44,0.6);
-    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+    background:rgba(17,21,44,0.32);
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
     border:1px solid var(--line); border-radius:20px;
     padding:18px 20px; max-height:260px; display:flex; flex-direction:column;
   }
@@ -373,10 +365,17 @@
 (function(){
   const canvas = document.getElementById('stars');
   const ctx = canvas.getContext('2d');
-  let w,h,stars=[];
+  let w,h,stars=[], lastW=0;
   function resize(){
     w = canvas.width = window.innerWidth;
     h = canvas.height = window.innerHeight;
+    // Mobile browsers fire 'resize' as the address bar hides/shows while
+    // scrolling, which only changes the height — reseeding the star
+    // field on that made stars visibly jump around mid-scroll. Only
+    // reseed on an actual width change (orientation/viewport change) or
+    // first load; a height-only wobble just keeps the existing stars.
+    if(stars.length && w === lastW) return;
+    lastW = w;
     const count = Math.floor((w*h)/9000);
     stars = Array.from({length:count},()=>({
       x:Math.random()*w, y:Math.random()*h,
@@ -403,6 +402,30 @@
   window.addEventListener('resize', resize);
   resize();
   requestAnimationFrame(draw);
+})();
+
+/* ============ Aurora background ============ */
+/* Driven from JS rather than a CSS @keyframes animation: long-running
+   CSS animations on a blurred, fixed-position layer get throttled or
+   outright paused by some mobile browsers (observed on Firefox for
+   Android), which made the aurora look frozen. A rAF loop keeps it
+   moving reliably everywhere, and we still honor prefers-reduced-motion
+   ourselves since nothing here is driven by the CSS animation rule the
+   reduced-motion media query strips out. */
+(function(){
+  const el = document.querySelector('.aurora');
+  if(!el) return;
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  function frame(t){
+    const s = t/1000;
+    const tx = Math.sin(s/9) * 16;
+    const ty = Math.cos(s/13) * 12;
+    const rot = Math.sin(s/17) * 5;
+    const scale = 1 + Math.sin(s/11) * 0.14;
+    el.style.transform = `translate3d(${tx.toFixed(2)}%, ${ty.toFixed(2)}%, 0) rotate(${rot.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 })();
 
 /* ============ i18n strings ============ */
