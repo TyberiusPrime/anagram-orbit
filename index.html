@@ -327,6 +327,8 @@
     <div class="hud">
       <span class="mode-badge" id="modeBadge">DAILY</span>
       <div class="timer" id="timer">00:00</div>
+      <input type="date" class="ghost" id="dateSelect" title="Play a past day's puzzle">
+      <button class="ghost" id="todayBtn" style="display:none">Today's riddle</button>
       <select class="ghost" id="packSelect" title="Choose word pack / language">
         <option value="all">🌐 English</option>
         <option value="animals">🐾 English · Animals</option>
@@ -387,7 +389,10 @@ const STRINGS = {
     modeRandom: 'RANDOM',
     animalsSuffix: ' · ANIMALS',
     subtitleDaily: (day) => `Today's puzzle · ${day}`,
+    subtitlePastDaily: (day) => `Puzzle for ${day} · not today's — jump back anytime`,
     subtitleRandom: 'Random orbit · share this URL to send this exact puzzle',
+    dateSelectTitle: "Play a past day's puzzle",
+    todayBtn: "↺ Today's riddle",
     missionLog: 'Mission Log',
     logEmpty: 'Solved words will appear here as you go.',
     logSub: (n, total) => `${n} / ${total} charted`,
@@ -421,7 +426,10 @@ const STRINGS = {
     modeRandom: 'ZUFALL',
     animalsSuffix: '',
     subtitleDaily: (day) => `Heutiges Rätsel · ${day}`,
+    subtitlePastDaily: (day) => `Rätsel für ${day} · nicht das heutige — jederzeit zurückspringen`,
     subtitleRandom: 'Zufalls-Orbit · teile diese URL, um genau dieses Rätsel zu senden',
+    dateSelectTitle: 'Rätsel eines vergangenen Tages spielen',
+    todayBtn: '↺ Heutiges Rätsel',
     missionLog: 'Missionslog',
     logEmpty: 'Gelöste Wörter erscheinen hier, sobald du sie schaffst.',
     logSub: (n, total) => `${n} / ${total} erfasst`,
@@ -620,6 +628,8 @@ function applyLangUI(lang){
   document.getElementById('pageTitle').textContent = S.h1;
   document.getElementById('packSelect').title = S.packSelectTitle;
   document.getElementById('randomBtn').textContent = S.randomBtn;
+  document.getElementById('dateSelect').title = S.dateSelectTitle;
+  document.getElementById('todayBtn').textContent = S.todayBtn;
 }
 
 function newGame(mode, seedOverride, packOverride){
@@ -630,6 +640,8 @@ function newGame(mode, seedOverride, packOverride){
     ? `daily-${todayKey()}`
     : `random-${Date.now()}-${Math.random()}`);
   const effectiveMode = seedStr.startsWith('daily-') ? 'daily' : 'random';
+  const dateStr = effectiveMode === 'daily' ? seedStr.slice(6) : null;
+  const isTodayDaily = effectiveMode === 'daily' && dateStr === todayKey();
   const rng = mulberry32(hashSeed(seedStr));
 
   WORD_BANK = getPackWords(pack);
@@ -647,6 +659,9 @@ function newGame(mode, seedOverride, packOverride){
   state = {
     lang: cfg.lang,
     mode: effectiveMode,
+    seedStr,
+    dateStr,
+    isTodayDaily,
     pack,
     words,
     currentIndex: 0,
@@ -665,9 +680,13 @@ function newGame(mode, seedOverride, packOverride){
   document.getElementById('modeBadge').textContent =
     (effectiveMode === 'daily' ? S.modeDaily : S.modeRandom) + (pack === 'animals' ? S.animalsSuffix : '');
   document.getElementById('subtitle').textContent = effectiveMode === 'daily'
-    ? S.subtitleDaily(todayKey())
+    ? (isTodayDaily ? S.subtitleDaily(dateStr) : S.subtitlePastDaily(dateStr))
     : S.subtitleRandom;
   document.getElementById('packSelect').value = pack;
+  const dateInput = document.getElementById('dateSelect');
+  dateInput.max = todayKey();
+  dateInput.value = dateStr || todayKey();
+  document.getElementById('todayBtn').style.display = isTodayDaily ? 'none' : '';
 
   renderBoardShell();
   lastLogEntryEl = null;
@@ -1112,6 +1131,8 @@ function letterKeyPress(letter){
 }
 
 document.addEventListener('keydown', (e)=>{
+  const tag = e.target && e.target.tagName;
+  if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
   if(!state || state.finished || state.waitingForNext) return;
   if(e.key === 'Backspace' && state.currentInput.length){
     const lastId = state.currentInput[state.currentInput.length-1];
@@ -1161,6 +1182,14 @@ document.getElementById('packSelect').addEventListener('change', (e)=>{
   const seedPart = (parseHash() || {}).seed;
   newGame(null, seedPart, e.target.value);
 });
+document.getElementById('dateSelect').addEventListener('change', (e)=>{
+  const val = e.target.value;
+  if(!val) return;
+  const today = todayKey();
+  const clamped = val > today ? today : val;
+  newGame(null, `daily-${clamped}`, state.pack);
+});
+document.getElementById('todayBtn').addEventListener('click', ()=> newGame('daily', null, state.pack));
 
 Promise.all([loadWordBank('en'), loadWordBank('de')]).then(()=>{
   const parsed = parseHash();
