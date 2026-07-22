@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
   :root{
+    color-scheme: dark;
     --void:#080a16;
     --void-2:#0d1128;
     --panel:#11152c;
@@ -42,6 +43,16 @@
       radial-gradient(ellipse 60% 40% at 15% 10%, rgba(177,140,255,0.16), transparent 60%),
       radial-gradient(ellipse 50% 35% at 85% 15%, rgba(111,227,255,0.12), transparent 60%),
       radial-gradient(ellipse 55% 45% at 50% 100%, rgba(111,240,168,0.08), transparent 60%);
+  }
+  .aurora{
+    position:fixed; inset:-25%; z-index:0; pointer-events:none; overflow:hidden;
+    background:
+      radial-gradient(ellipse 55% 40% at 20% 20%, rgba(111,240,168,0.30), transparent 60%),
+      radial-gradient(ellipse 50% 40% at 75% 15%, rgba(111,227,255,0.26), transparent 60%),
+      radial-gradient(ellipse 55% 45% at 60% 65%, rgba(177,140,255,0.26), transparent 60%),
+      radial-gradient(ellipse 45% 35% at 15% 75%, rgba(255,207,111,0.16), transparent 60%);
+    filter:blur(80px);
+    mix-blend-mode:screen;
   }
   .wrap{
     position:relative; z-index:1;
@@ -113,14 +124,9 @@
   .board{display:flex; flex-direction:column; gap:20px;}
 
   .card{
-    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    background:linear-gradient(180deg, rgba(17,21,44,0.4), rgba(22,26,54,0.4));
     border:1px solid var(--line); border-radius:20px; padding:28px;
     position:relative; overflow:hidden;
-  }
-  .card::before{
-    content:''; position:absolute; top:-40%; right:-20%; width:60%; height:140%;
-    background:radial-gradient(circle,rgba(111,227,255,0.06),transparent 65%);
-    pointer-events:none;
   }
   .word-count{
     font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--dim);
@@ -229,7 +235,8 @@
 
   /* ---------- History panel ---------- */
   .log{
-    background:var(--panel); border:1px solid var(--line); border-radius:20px;
+    background:rgba(17,21,44,0.4);
+    border:1px solid var(--line); border-radius:20px;
     padding:18px 20px; max-height:260px; display:flex; flex-direction:column;
   }
   .log h3{
@@ -316,6 +323,7 @@
 <body>
 <canvas id="stars"></canvas>
 <div class="nebula"></div>
+<div class="aurora"></div>
 <div class="sparkle-layer" id="sparkleLayer"></div>
 
 <div class="wrap">
@@ -327,6 +335,10 @@
     <div class="hud">
       <span class="mode-badge" id="modeBadge">DAILY</span>
       <div class="timer" id="timer">00:00</div>
+      <input type="date" class="ghost" id="dateSelect" title="Play a past day's puzzle">
+      <button class="ghost" id="todayBtn" style="display:none">Today's riddle</button>
+      <button class="ghost" id="shareBtn">Share</button>
+      <button class="ghost" id="shareExactBtn" style="display:none">Share this puzzle</button>
       <select class="ghost" id="packSelect" title="Choose word pack / language">
         <option value="all">🌐 English</option>
         <option value="animals">🐾 English · Animals</option>
@@ -346,25 +358,36 @@
 (function(){
   const canvas = document.getElementById('stars');
   const ctx = canvas.getContext('2d');
-  let w,h,stars=[];
+  let w,h,stars=[], lastW=0;
   function resize(){
     w = canvas.width = window.innerWidth;
     h = canvas.height = window.innerHeight;
+    // Mobile browsers fire 'resize' as the address bar hides/shows while
+    // scrolling, which only changes the height — reseeding the star
+    // field on that made stars visibly jump around mid-scroll. Only
+    // reseed on an actual width change (orientation/viewport change) or
+    // first load; a height-only wobble just keeps the existing stars.
+    if(stars.length && w === lastW) return;
+    lastW = w;
     const count = Math.floor((w*h)/9000);
     stars = Array.from({length:count},()=>({
       x:Math.random()*w, y:Math.random()*h,
-      r:Math.random()*1.3+0.3,
+      r:Math.random()*1.3+0.5,
       phase:Math.random()*Math.PI*2,
-      speed:Math.random()*0.02+0.008
+      speed:Math.random()*0.00078+0.00026
     }));
   }
   function draw(t){
     ctx.clearRect(0,0,w,h);
     for(const s of stars){
-      const tw = 0.55 + Math.sin(t*s.speed + s.phase)*0.45;
+      const tw = 0.5 + Math.sin(t*s.speed + s.phase)*0.35;
+      const glow = s.r*3;
+      const grad = ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,glow);
+      grad.addColorStop(0, `rgba(238,241,255,${tw.toFixed(2)})`);
+      grad.addColorStop(1, 'rgba(238,241,255,0)');
       ctx.beginPath();
-      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-      ctx.fillStyle = `rgba(238,241,255,${tw.toFixed(2)})`;
+      ctx.arc(s.x,s.y,glow,0,Math.PI*2);
+      ctx.fillStyle = grad;
       ctx.fill();
     }
     requestAnimationFrame(draw);
@@ -372,6 +395,30 @@
   window.addEventListener('resize', resize);
   resize();
   requestAnimationFrame(draw);
+})();
+
+/* ============ Aurora background ============ */
+/* Driven from JS rather than a CSS @keyframes animation: long-running
+   CSS animations on a blurred, fixed-position layer get throttled or
+   outright paused by some mobile browsers (observed on Firefox for
+   Android), which made the aurora look frozen. A rAF loop keeps it
+   moving reliably everywhere. Runs unconditionally, same as the star
+   canvas above — some mobile OSes flip prefers-reduced-motion on via a
+   battery-saver setting the user never consciously chose, which would
+   otherwise freeze just this one effect while stars kept moving. */
+(function(){
+  const el = document.querySelector('.aurora');
+  if(!el) return;
+  function frame(t){
+    const s = t/1000;
+    const tx = Math.sin(s/9) * 16;
+    const ty = Math.cos(s/13) * 12;
+    const rot = Math.sin(s/17) * 5;
+    const scale = 1 + Math.sin(s/11) * 0.14;
+    el.style.transform = `translate3d(${tx.toFixed(2)}%, ${ty.toFixed(2)}%, 0) rotate(${rot.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 })();
 
 /* ============ i18n strings ============ */
@@ -387,7 +434,15 @@ const STRINGS = {
     modeRandom: 'RANDOM',
     animalsSuffix: ' · ANIMALS',
     subtitleDaily: (day) => `Today's puzzle · ${day}`,
+    subtitlePastDaily: (day) => `Puzzle for ${day} · not today's — jump back anytime`,
     subtitleRandom: 'Random orbit · share this URL to send this exact puzzle',
+    dateSelectTitle: "Play a past day's puzzle",
+    todayBtn: "↺ Today's riddle",
+    shareBtn: '⇪ Share',
+    shareBtnTitle: 'Share Anagram Orbit',
+    shareExactBtn: '⇪ Share this puzzle',
+    shareExactBtnTitle: 'Share this exact puzzle',
+    shareCopied: 'Link copied!',
     missionLog: 'Mission Log',
     logEmpty: 'Solved words will appear here as you go.',
     logSub: (n, total) => `${n} / ${total} charted`,
@@ -421,7 +476,15 @@ const STRINGS = {
     modeRandom: 'ZUFALL',
     animalsSuffix: '',
     subtitleDaily: (day) => `Heutiges Rätsel · ${day}`,
+    subtitlePastDaily: (day) => `Rätsel für ${day} · nicht das heutige — jederzeit zurückspringen`,
     subtitleRandom: 'Zufalls-Orbit · teile diese URL, um genau dieses Rätsel zu senden',
+    dateSelectTitle: 'Rätsel eines vergangenen Tages spielen',
+    todayBtn: '↺ Heutiges Rätsel',
+    shareBtn: '⇪ Teilen',
+    shareBtnTitle: 'Anagramm-Orbit teilen',
+    shareExactBtn: '⇪ Dieses Rätsel teilen',
+    shareExactBtnTitle: 'Genau dieses Rätsel teilen',
+    shareCopied: 'Link kopiert!',
     missionLog: 'Missionslog',
     logEmpty: 'Gelöste Wörter erscheinen hier, sobald du sie schaffst.',
     logSub: (n, total) => `${n} / ${total} erfasst`,
@@ -611,6 +674,27 @@ function putHash(pack, seedStr){
   }
 }
 
+/* Sharing: button 1 always points at the bare app URL (today's daily
+   puzzle, whatever that is when opened), button 2 points at the current
+   URL including hash, so it reproduces this exact date/seed. */
+function baseShareUrl(){ return location.origin + location.pathname; }
+function exactShareUrl(){ return location.origin + location.pathname + location.hash; }
+async function shareLink(url, btn){
+  const S = STRINGS[state.lang];
+  if(navigator.share){
+    try{ await navigator.share({url, title: document.title}); return; }
+    catch(e){ if(e && e.name === 'AbortError') return; }
+  }
+  try{
+    await navigator.clipboard.writeText(url);
+    const original = btn.textContent;
+    btn.textContent = S.shareCopied;
+    setTimeout(()=>{ btn.textContent = original; }, 1600);
+  } catch(e){
+    window.prompt('Copy this link:', url);
+  }
+}
+
 /* Header chrome that doesn't live inside renderBoardShell()'s template
    (so it isn't already refreshed on every newGame()) gets updated here. */
 function applyLangUI(lang){
@@ -620,6 +704,12 @@ function applyLangUI(lang){
   document.getElementById('pageTitle').textContent = S.h1;
   document.getElementById('packSelect').title = S.packSelectTitle;
   document.getElementById('randomBtn').textContent = S.randomBtn;
+  document.getElementById('dateSelect').title = S.dateSelectTitle;
+  document.getElementById('todayBtn').textContent = S.todayBtn;
+  document.getElementById('shareBtn').textContent = S.shareBtn;
+  document.getElementById('shareBtn').title = S.shareBtnTitle;
+  document.getElementById('shareExactBtn').textContent = S.shareExactBtn;
+  document.getElementById('shareExactBtn').title = S.shareExactBtnTitle;
 }
 
 function newGame(mode, seedOverride, packOverride){
@@ -630,6 +720,8 @@ function newGame(mode, seedOverride, packOverride){
     ? `daily-${todayKey()}`
     : `random-${Date.now()}-${Math.random()}`);
   const effectiveMode = seedStr.startsWith('daily-') ? 'daily' : 'random';
+  const dateStr = effectiveMode === 'daily' ? seedStr.slice(6) : null;
+  const isTodayDaily = effectiveMode === 'daily' && dateStr === todayKey();
   const rng = mulberry32(hashSeed(seedStr));
 
   WORD_BANK = getPackWords(pack);
@@ -647,6 +739,9 @@ function newGame(mode, seedOverride, packOverride){
   state = {
     lang: cfg.lang,
     mode: effectiveMode,
+    seedStr,
+    dateStr,
+    isTodayDaily,
     pack,
     words,
     currentIndex: 0,
@@ -665,9 +760,14 @@ function newGame(mode, seedOverride, packOverride){
   document.getElementById('modeBadge').textContent =
     (effectiveMode === 'daily' ? S.modeDaily : S.modeRandom) + (pack === 'animals' ? S.animalsSuffix : '');
   document.getElementById('subtitle').textContent = effectiveMode === 'daily'
-    ? S.subtitleDaily(todayKey())
+    ? (isTodayDaily ? S.subtitleDaily(dateStr) : S.subtitlePastDaily(dateStr))
     : S.subtitleRandom;
   document.getElementById('packSelect').value = pack;
+  const dateInput = document.getElementById('dateSelect');
+  dateInput.max = todayKey();
+  dateInput.value = dateStr || todayKey();
+  document.getElementById('todayBtn').style.display = isTodayDaily ? 'none' : '';
+  document.getElementById('shareExactBtn').style.display = isTodayDaily ? 'none' : '';
 
   renderBoardShell();
   lastLogEntryEl = null;
@@ -1112,6 +1212,8 @@ function letterKeyPress(letter){
 }
 
 document.addEventListener('keydown', (e)=>{
+  const tag = e.target && e.target.tagName;
+  if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
   if(!state || state.finished || state.waitingForNext) return;
   if(e.key === 'Backspace' && state.currentInput.length){
     const lastId = state.currentInput[state.currentInput.length-1];
@@ -1161,6 +1263,21 @@ document.getElementById('packSelect').addEventListener('change', (e)=>{
   const seedPart = (parseHash() || {}).seed;
   newGame(null, seedPart, e.target.value);
 });
+document.getElementById('dateSelect').addEventListener('focus', (e)=>{
+  // Refresh the ceiling right before the picker opens, in case the page
+  // has been sitting open since before local midnight.
+  e.target.max = todayKey();
+});
+document.getElementById('dateSelect').addEventListener('change', (e)=>{
+  const val = e.target.value;
+  if(!val) return;
+  const today = todayKey();
+  const clamped = val <= today ? val : today;
+  newGame(null, `daily-${clamped}`, state.pack);
+});
+document.getElementById('todayBtn').addEventListener('click', ()=> newGame('daily', null, state.pack));
+document.getElementById('shareBtn').addEventListener('click', (e)=> shareLink(baseShareUrl(), e.currentTarget));
+document.getElementById('shareExactBtn').addEventListener('click', (e)=> shareLink(exactShareUrl(), e.currentTarget));
 
 Promise.all([loadWordBank('en'), loadWordBank('de')]).then(()=>{
   const parsed = parseHash();
