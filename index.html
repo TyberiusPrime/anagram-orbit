@@ -329,6 +329,8 @@
       <div class="timer" id="timer">00:00</div>
       <input type="date" class="ghost" id="dateSelect" title="Play a past day's puzzle">
       <button class="ghost" id="todayBtn" style="display:none">Today's riddle</button>
+      <button class="ghost" id="shareBtn">Share</button>
+      <button class="ghost" id="shareExactBtn" style="display:none">Share this puzzle</button>
       <select class="ghost" id="packSelect" title="Choose word pack / language">
         <option value="all">🌐 English</option>
         <option value="animals">🐾 English · Animals</option>
@@ -393,6 +395,11 @@ const STRINGS = {
     subtitleRandom: 'Random orbit · share this URL to send this exact puzzle',
     dateSelectTitle: "Play a past day's puzzle",
     todayBtn: "↺ Today's riddle",
+    shareBtn: '⇪ Share',
+    shareBtnTitle: 'Share Anagram Orbit',
+    shareExactBtn: '⇪ Share this puzzle',
+    shareExactBtnTitle: 'Share this exact puzzle',
+    shareCopied: 'Link copied!',
     missionLog: 'Mission Log',
     logEmpty: 'Solved words will appear here as you go.',
     logSub: (n, total) => `${n} / ${total} charted`,
@@ -430,6 +437,11 @@ const STRINGS = {
     subtitleRandom: 'Zufalls-Orbit · teile diese URL, um genau dieses Rätsel zu senden',
     dateSelectTitle: 'Rätsel eines vergangenen Tages spielen',
     todayBtn: '↺ Heutiges Rätsel',
+    shareBtn: '⇪ Teilen',
+    shareBtnTitle: 'Anagramm-Orbit teilen',
+    shareExactBtn: '⇪ Dieses Rätsel teilen',
+    shareExactBtnTitle: 'Genau dieses Rätsel teilen',
+    shareCopied: 'Link kopiert!',
     missionLog: 'Missionslog',
     logEmpty: 'Gelöste Wörter erscheinen hier, sobald du sie schaffst.',
     logSub: (n, total) => `${n} / ${total} erfasst`,
@@ -619,6 +631,27 @@ function putHash(pack, seedStr){
   }
 }
 
+/* Sharing: button 1 always points at the bare app URL (today's daily
+   puzzle, whatever that is when opened), button 2 points at the current
+   URL including hash, so it reproduces this exact date/seed. */
+function baseShareUrl(){ return location.origin + location.pathname; }
+function exactShareUrl(){ return location.origin + location.pathname + location.hash; }
+async function shareLink(url, btn){
+  const S = STRINGS[state.lang];
+  if(navigator.share){
+    try{ await navigator.share({url, title: document.title}); return; }
+    catch(e){ if(e && e.name === 'AbortError') return; }
+  }
+  try{
+    await navigator.clipboard.writeText(url);
+    const original = btn.textContent;
+    btn.textContent = S.shareCopied;
+    setTimeout(()=>{ btn.textContent = original; }, 1600);
+  } catch(e){
+    window.prompt('Copy this link:', url);
+  }
+}
+
 /* Header chrome that doesn't live inside renderBoardShell()'s template
    (so it isn't already refreshed on every newGame()) gets updated here. */
 function applyLangUI(lang){
@@ -630,6 +663,10 @@ function applyLangUI(lang){
   document.getElementById('randomBtn').textContent = S.randomBtn;
   document.getElementById('dateSelect').title = S.dateSelectTitle;
   document.getElementById('todayBtn').textContent = S.todayBtn;
+  document.getElementById('shareBtn').textContent = S.shareBtn;
+  document.getElementById('shareBtn').title = S.shareBtnTitle;
+  document.getElementById('shareExactBtn').textContent = S.shareExactBtn;
+  document.getElementById('shareExactBtn').title = S.shareExactBtnTitle;
 }
 
 function newGame(mode, seedOverride, packOverride){
@@ -687,6 +724,7 @@ function newGame(mode, seedOverride, packOverride){
   dateInput.max = todayKey();
   dateInput.value = dateStr || todayKey();
   document.getElementById('todayBtn').style.display = isTodayDaily ? 'none' : '';
+  document.getElementById('shareExactBtn').style.display = isTodayDaily ? 'none' : '';
 
   renderBoardShell();
   lastLogEntryEl = null;
@@ -1190,6 +1228,8 @@ document.getElementById('dateSelect').addEventListener('change', (e)=>{
   newGame(null, `daily-${clamped}`, state.pack);
 });
 document.getElementById('todayBtn').addEventListener('click', ()=> newGame('daily', null, state.pack));
+document.getElementById('shareBtn').addEventListener('click', (e)=> shareLink(baseShareUrl(), e.currentTarget));
+document.getElementById('shareExactBtn').addEventListener('click', (e)=> shareLink(exactShareUrl(), e.currentTarget));
 
 Promise.all([loadWordBank('en'), loadWordBank('de')]).then(()=>{
   const parsed = parseHash();
