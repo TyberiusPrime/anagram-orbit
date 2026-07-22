@@ -702,8 +702,6 @@ function saveProgress(){
       wordStartAccumulatedMs: state.wordStartAccumulatedMs,
       hintUsed: state.hintUsed,
       defUsed: state.defUsed,
-      startTime: state.startTime,
-      endTime: state.endTime,
       finished: state.finished
     };
     localStorage.setItem(key, JSON.stringify(data));
@@ -843,8 +841,6 @@ function newGame(mode, seedOverride, packOverride){
     currentInput: [],
     hintUsed: false,
     defUsed: false,
-    startTime: Date.now(),
-    endTime: null,
     penaltySeconds: 0,
     accumulatedMs: 0,
     segmentStart: isPageFocused() ? Date.now() : null,
@@ -861,8 +857,6 @@ function newGame(mode, seedOverride, packOverride){
     state.solved = Array.isArray(saved.solved) ? saved.solved : [];
     state.penaltySeconds = saved.penaltySeconds || 0;
     state.accumulatedMs = saved.accumulatedMs || 0;
-    state.startTime = saved.startTime || state.startTime;
-    state.endTime = saved.endTime || null;
     state.finished = !!saved.finished;
     if(state.finished) state.segmentStart = null;
     restoreOpts = { hintUsed: saved.hintUsed, defUsed: saved.defUsed, wordStartAccumulatedMs: saved.wordStartAccumulatedMs };
@@ -885,8 +879,8 @@ function newGame(mode, seedOverride, packOverride){
   if(state.finished){
     clearInterval(timerHandle);
     renderProgress();
-    const totalElapsed = Math.floor(state.accumulatedMs/1000) + state.penaltySeconds;
-    const wallClockSeconds = Math.max(0, Math.floor(((state.endTime || Date.now()) - state.startTime)/1000));
+    const wallClockSeconds = Math.floor(state.accumulatedMs/1000);
+    const totalElapsed = wallClockSeconds + state.penaltySeconds;
     renderEndScreen(totalElapsed, wallClockSeconds);
   } else {
     renderBoardShell();
@@ -1280,12 +1274,11 @@ function launchSparkles(count){
 function finishGame(){
   pauseClock();
   state.finished = true;
-  state.endTime = Date.now();
   clearInterval(timerHandle);
   renderProgress();
   launchSparkles();
-  const totalElapsed = Math.floor(state.accumulatedMs/1000) + state.penaltySeconds;
-  const wallClockSeconds = Math.max(0, Math.floor((state.endTime - state.startTime)/1000));
+  const wallClockSeconds = Math.floor(state.accumulatedMs/1000);
+  const totalElapsed = wallClockSeconds + state.penaltySeconds;
   document.getElementById('timer').textContent = formatTime(totalElapsed);
   saveProgress();
   renderEndScreen(totalElapsed, wallClockSeconds);
