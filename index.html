@@ -1049,11 +1049,11 @@ function selectTile(tileId){
   const tile = w.letters.find(t=>t.id===tileId);
 
   if(tile.used){
-    if(tile.hinted) return; // revealed letters are locked in place
     // remove this tile and every tile selected after it
     const pos = state.currentInput.indexOf(tileId);
-    const removed = state.currentInput.slice(pos);
-    state.currentInput = state.currentInput.slice(0,pos);
+    const keepFrom = tile.hinted ? pos+1 : pos; // revealed letter itself stays locked in place
+    const removed = state.currentInput.slice(keepFrom);
+    state.currentInput = state.currentInput.slice(0,keepFrom);
     removed.forEach(id => { w.letters.find(t=>t.id===id).used = false; });
   } else {
     tile.used = true;
