@@ -117,7 +117,9 @@
   }
   .dot.current{border-color:var(--cyan); box-shadow:0 0 10px 1px var(--cyan); animation:pulse 1.6s infinite ease-in-out;}
   .dot.solved{background:var(--green); border-color:var(--green); box-shadow:0 0 8px rgba(110,240,168,0.6);}
-  .dot.skipped{background:var(--amber); border-color:var(--amber); box-shadow:0 0 8px rgba(255,171,94,0.5);}
+  .dot.hinted{background:var(--cyan); border-color:var(--cyan); box-shadow:0 0 8px rgba(111,227,255,0.6);}
+  .dot.defhint{background:var(--gold); border-color:var(--gold); box-shadow:0 0 8px rgba(255,207,111,0.6);}
+  .dot.skipped{background:var(--red); border-color:var(--red); box-shadow:0 0 8px rgba(255,107,107,0.5);}
   @keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
 
   /* ---------- Layout ---------- */
@@ -330,7 +332,7 @@
   <header>
     <div class="brand">
       <h1 id="pageTitle">Anagram Orbit</h1>
-      <p id="subtitle">Unscramble 18 words. Chart your fastest orbit.</p>
+      <p id="subtitle">Unscramble 12 words. Chart your fastest orbit.</p>
     </div>
     <div class="hud">
       <span class="mode-badge" id="modeBadge">DAILY</span>
@@ -462,6 +464,7 @@ const STRINGS = {
     solvedLabel: 'Solved',
     skippedLabel: 'Skipped',
     penaltiesLabel: 'Penalties',
+    wallClockLabel: 'Wall-clock time',
     playRandomAgain: 'Play a random game',
     reviewBtn: 'Review words below',
     fullMissionLog: 'Full Mission Log',
@@ -504,6 +507,7 @@ const STRINGS = {
     solvedLabel: 'Gelöst',
     skippedLabel: 'Übersprungen',
     penaltiesLabel: 'Strafzeiten',
+    wallClockLabel: 'Reale Zeit',
     playRandomAgain: 'Zufallsspiel spielen',
     reviewBtn: 'Wörter unten ansehen',
     fullMissionLog: 'Vollständiges Missionslog',
@@ -566,6 +570,7 @@ const FALLBACK_BANK_DE = [
 ];
 const RAW_BANKS = { en: FALLBACK_BANK_EN, de: FALLBACK_BANK_DE };
 let WORD_BANK = RAW_BANKS.en;
+const WORDS_PER_GAME = 12;
 
 /* "Packs" are client-side filters over a language's fetched word list — no
    extra network request needed. 'animals' keeps only WordNet's noun.animal
@@ -585,7 +590,7 @@ function getPackWords(pack){
   const raw = RAW_BANKS[cfg.lang];
   if(cfg.filter){
     const filtered = raw.filter(cfg.filter);
-    if(filtered.length >= 18) return filtered;
+    if(filtered.length >= WORDS_PER_GAME) return filtered;
   }
   return raw;
 }
@@ -630,6 +635,94 @@ function shuffleLetters(word, rng){
 let state = null;
 let timerHandle = null;
 let lastLogEntryEl = null;
+
+/* ============ Active-time clock ============ */
+/* The header timer and per-word timings only advance while the tab is
+   visible and focused. Rather than a plain Date.now()-startTime diff,
+   we accumulate active milliseconds in state.accumulatedMs and keep
+   state.segmentStart as the timestamp the current focused segment began
+   (null while paused/backgrounded). activeMsNow() folds the open segment
+   in without mutating state, so it's safe to call from a render path. */
+function isPageFocused(){ return !document.hidden && document.hasFocus(); }
+function activeMsNow(){
+  if(!state) return 0;
+  return state.accumulatedMs + (state.segmentStart ? Date.now() - state.segmentStart : 0);
+}
+function pauseClock(){
+  if(state && state.segmentStart){
+    state.accumulatedMs += Date.now() - state.segmentStart;
+    state.segmentStart = null;
+  }
+}
+function resumeClock(){
+  if(state && !state.finished && !state.segmentStart && isPageFocused()){
+    state.segmentStart = Date.now();
+  }
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){ pauseClock(); saveProgress(); }
+  else resumeClock();
+});
+window.addEventListener('blur', ()=>{ pauseClock(); saveProgress(); });
+window.addEventListener('focus', resumeClock);
+window.addEventListener('pagehide', ()=>{ pauseClock(); saveProgress(); });
+
+/* ============ Progress persistence ============ */
+/* Puzzles are fully reproducible from their `pack:seed` (see newGame),
+   so the only thing worth saving to localStorage is the player's place
+   in that puzzle: which word they're on, what's solved/skipped, and how
+   much active time + penalty has accrued. Reloading (or coming back
+   days later) re-derives the words from the seed and overlays this. */
+const LS_PREFIX = 'anagramOrbit:progress:';
+const LS_INDEX_KEY = 'anagramOrbit:progressIndex';
+const MAX_SAVED_GAMES = 50;
+function progressKey(pack, seedStr){ return LS_PREFIX + pack + ':' + seedStr; }
+function touchProgressIndex(key){
+  let idx;
+  try{ idx = JSON.parse(localStorage.getItem(LS_INDEX_KEY)) || []; } catch(e){ idx = []; }
+  idx = idx.filter(k => k !== key);
+  idx.unshift(key);
+  while(idx.length > MAX_SAVED_GAMES){
+    const stale = idx.pop();
+    localStorage.removeItem(stale);
+  }
+  localStorage.setItem(LS_INDEX_KEY, JSON.stringify(idx));
+}
+function saveProgress(){
+  if(!state) return;
+  try{
+    const key = progressKey(state.pack, state.seedStr);
+    const data = {
+      pack: state.pack,
+      seedStr: state.seedStr,
+      currentIndex: state.currentIndex,
+      solved: state.solved,
+      penaltySeconds: state.penaltySeconds,
+      accumulatedMs: activeMsNow(),
+      wordStartAccumulatedMs: state.wordStartAccumulatedMs,
+      hintUsed: state.hintUsed,
+      defUsed: state.defUsed,
+      finished: state.finished
+    };
+    localStorage.setItem(key, JSON.stringify(data));
+    touchProgressIndex(key);
+  } catch(e){ /* localStorage unavailable (private mode / quota) — progress just won't persist */ }
+}
+function loadProgress(pack, seedStr){
+  try{
+    const raw = localStorage.getItem(progressKey(pack, seedStr));
+    if(!raw) return null;
+    const data = JSON.parse(raw);
+    if(data && data.seedStr === seedStr && data.pack === pack) return data;
+  } catch(e){}
+  return null;
+}
+function rebuildLog(){
+  state.solved.forEach(rec => {
+    const w = state.words[rec.index];
+    addLogEntry(rec.word, rec.def, rec.skipped, rec.timeTaken, w ? w.category : '');
+  });
+}
 
 /* Gradient run from the first letter picked (cyan) to the last (violet).
    Works purely off click ORDER/position, never off which physical tile —
@@ -729,7 +822,7 @@ function newGame(mode, seedOverride, packOverride){
   putHash(pack, seedStr);
 
   const order = seededShuffle(WORD_BANK.map((_,i)=>i), rng);
-  const chosen = order.slice(0,18).map(i => WORD_BANK[i]);
+  const chosen = order.slice(0,WORDS_PER_GAME).map(i => WORD_BANK[i]);
 
   const words = chosen.map(w => ({
     word: w.word, def: w.def, category: w.category || '',
@@ -748,13 +841,26 @@ function newGame(mode, seedOverride, packOverride){
     currentInput: [],
     hintUsed: false,
     defUsed: false,
-    startTime: Date.now(),
     penaltySeconds: 0,
-    wordStartTime: Date.now(),
+    accumulatedMs: 0,
+    segmentStart: isPageFocused() ? Date.now() : null,
+    wordStartAccumulatedMs: 0,
     solved: [],
     finished: false,
     waitingForNext: false
   };
+
+  const saved = loadProgress(pack, seedStr);
+  let restoreOpts = null;
+  if(saved){
+    state.currentIndex = Math.min(Math.max(saved.currentIndex||0, 0), state.words.length-1);
+    state.solved = Array.isArray(saved.solved) ? saved.solved : [];
+    state.penaltySeconds = saved.penaltySeconds || 0;
+    state.accumulatedMs = saved.accumulatedMs || 0;
+    state.finished = !!saved.finished;
+    if(state.finished) state.segmentStart = null;
+    restoreOpts = { hintUsed: saved.hintUsed, defUsed: saved.defUsed, wordStartAccumulatedMs: saved.wordStartAccumulatedMs };
+  }
 
   applyLangUI(cfg.lang);
   document.getElementById('modeBadge').textContent =
@@ -769,11 +875,20 @@ function newGame(mode, seedOverride, packOverride){
   document.getElementById('todayBtn').style.display = isTodayDaily ? 'none' : '';
   document.getElementById('shareExactBtn').style.display = isTodayDaily ? 'none' : '';
 
-  renderBoardShell();
   lastLogEntryEl = null;
-  renderProgress();
-  setupWord(0);
-  startTimer();
+  if(state.finished){
+    clearInterval(timerHandle);
+    renderProgress();
+    const wallClockSeconds = Math.floor(state.accumulatedMs/1000);
+    const totalElapsed = wallClockSeconds + state.penaltySeconds;
+    renderEndScreen(totalElapsed, wallClockSeconds);
+  } else {
+    renderBoardShell();
+    renderProgress();
+    rebuildLog();
+    setupWord(state.currentIndex, restoreOpts);
+    startTimer();
+  }
 }
 
 function renderBoardShell(){
@@ -815,22 +930,35 @@ function renderBoardShell(){
 /* ---------- Rendering ---------- */
 function currentWordObj(){ return state.words[state.currentIndex]; }
 
-function setupWord(i){
+function setupWord(i, restore){
   const S = STRINGS[state.lang];
   state.currentIndex = i;
   state.currentInput = [];
-  state.hintUsed = false;
-  state.defUsed = false;
-  state.wordStartTime = Date.now();
+  state.hintUsed = !!(restore && restore.hintUsed);
+  state.defUsed = !!(restore && restore.defUsed);
+  state.wordStartAccumulatedMs = (restore && restore.wordStartAccumulatedMs != null)
+    ? restore.wordStartAccumulatedMs
+    : activeMsNow();
   state.waitingForNext = false;
   const w = currentWordObj();
   w.letters.forEach(t => t.used = false);
 
+  if(state.hintUsed){
+    const firstTile = w.letters.find(t => t.ch === w.word[0]);
+    firstTile.used = true;
+    firstTile.hinted = true;
+    state.currentInput.push(firstTile.id);
+  }
+
   document.getElementById('wordCount').textContent = S.wordCount(i+1, state.words.length);
   document.getElementById('defHint').classList.remove('show');
-  document.getElementById('hintBtn').disabled = false;
-  document.getElementById('defBtn').disabled = false;
+  document.getElementById('hintBtn').disabled = state.hintUsed;
+  document.getElementById('defBtn').disabled = state.defUsed;
   document.getElementById('skipBtn').disabled = false;
+  if(state.defUsed){
+    document.getElementById('defHintText').textContent = w.def;
+    document.getElementById('defHint').classList.add('show');
+  }
 
   renderTiles();
   renderSlots();
@@ -901,7 +1029,12 @@ function renderProgress(){
     const d = document.createElement('div');
     const solvedEntry = state.solved.find(s=>s.index===i);
     let cls = 'dot';
-    if(solvedEntry) cls += solvedEntry.skipped ? ' skipped' : ' solved';
+    if(solvedEntry){
+      if(solvedEntry.skipped) cls += ' skipped';
+      else if(solvedEntry.defUsed) cls += ' defhint';
+      else if(solvedEntry.hintUsed) cls += ' hinted';
+      else cls += ' solved';
+    }
     else if(i === state.currentIndex && !state.finished) cls += ' current';
     d.className = cls;
     d.title = S.dotTitle(i+1);
@@ -962,8 +1095,8 @@ function handleWrong(){
 
 function handleCorrect(){
   const w = currentWordObj();
-  const timeTaken = Math.max(0, Math.round((Date.now() - state.wordStartTime)/1000));
-  state.solved.push({index: state.currentIndex, word:w.word, def:w.def, skipped:false, timeTaken});
+  const timeTaken = Math.max(0, Math.round((activeMsNow() - state.wordStartAccumulatedMs)/1000));
+  state.solved.push({index: state.currentIndex, word:w.word, def:w.def, skipped:false, timeTaken, hintUsed: state.hintUsed, defUsed: state.defUsed});
 
   // happy wiggle, staggered left-to-right across the slots...
   document.querySelectorAll('#slots .slot').forEach((s,i) => {
@@ -991,6 +1124,7 @@ function handleCorrect(){
   document.getElementById('skipBtn').disabled = true;
   state.waitingForNext = true;
 
+  saveProgress();
   clearTimeout(window._autoAdvance);
   window._autoAdvance = setTimeout(()=> advanceWord(), 800);
 }
@@ -1036,6 +1170,7 @@ function useHint(){
 
   renderTiles();
   renderSlots();
+  saveProgress();
   if(state.currentInput.length === w.word.length) checkAnswer();
 }
 
@@ -1048,6 +1183,7 @@ function useDefinitionHint(){
   document.getElementById('defBtn').disabled = true;
   document.getElementById('defHintText').textContent = w.def;
   document.getElementById('defHint').classList.add('show');
+  saveProgress();
 }
 
 function useSkip(){
@@ -1055,7 +1191,7 @@ function useSkip(){
   const w = currentWordObj();
   state.penaltySeconds += 120;
   flashPenalty();
-  state.solved.push({index: state.currentIndex, word:w.word, def:w.def, skipped:true, timeTaken:null});
+  state.solved.push({index: state.currentIndex, word:w.word, def:w.def, skipped:true, timeTaken:null, hintUsed: state.hintUsed, defUsed: state.defUsed});
   renderProgress();
   addLogEntry(w.word, w.def, true, null, w.category);
 
@@ -1065,6 +1201,7 @@ function useSkip(){
   document.getElementById('skipBtn').disabled = true;
   state.waitingForNext = true;
 
+  saveProgress();
   clearTimeout(window._autoAdvance);
   window._autoAdvance = setTimeout(()=> advanceWord(), 1000);
 }
@@ -1103,8 +1240,8 @@ function formatTime(totalSeconds){
 function startTimer(){
   clearInterval(timerHandle);
   timerHandle = setInterval(()=>{
-    if(state.finished) return;
-    const elapsed = Math.floor((Date.now() - state.startTime)/1000) + state.penaltySeconds;
+    if(!state || state.finished) return;
+    const elapsed = Math.floor(activeMsNow()/1000) + state.penaltySeconds;
     document.getElementById('timer').textContent = formatTime(elapsed);
   }, 250);
 }
@@ -1135,14 +1272,20 @@ function launchSparkles(count){
 }
 
 function finishGame(){
-  const S = STRINGS[state.lang];
+  pauseClock();
   state.finished = true;
   clearInterval(timerHandle);
   renderProgress();
   launchSparkles();
-  const totalElapsed = Math.floor((Date.now() - state.startTime)/1000) + state.penaltySeconds;
+  const wallClockSeconds = Math.floor(state.accumulatedMs/1000);
+  const totalElapsed = wallClockSeconds + state.penaltySeconds;
   document.getElementById('timer').textContent = formatTime(totalElapsed);
+  saveProgress();
+  renderEndScreen(totalElapsed, wallClockSeconds);
+}
 
+function renderEndScreen(totalElapsed, wallClockSeconds){
+  const S = STRINGS[state.lang];
   const solvedCount = state.solved.filter(s=>!s.skipped).length;
   const skippedCount = state.solved.filter(s=>s.skipped).length;
   const hintPenalty = state.penaltySeconds; // includes both hint+skip penalties combined
@@ -1154,6 +1297,7 @@ function finishGame(){
       <div class="big-time">${formatTime(totalElapsed)}</div>
       <p class="tag">${S.totalTimeTag}</p>
       <div class="end-stats">
+        <div><div class="n" style="color:var(--violet)">${formatTime(wallClockSeconds)}</div><div class="l">${S.wallClockLabel}</div></div>
         <div><div class="n" style="color:var(--green)">${solvedCount}</div><div class="l">${S.solvedLabel}</div></div>
         <div><div class="n" style="color:var(--amber)">${skippedCount}</div><div class="l">${S.skippedLabel}</div></div>
         <div><div class="n" style="color:var(--cyan)">+${formatTime(hintPenalty)}</div><div class="l">${S.penaltiesLabel}</div></div>
@@ -1246,7 +1390,7 @@ async function loadWordBank(lang){
     const resp = await fetch(jsonUrl);
     if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
-    if(!Array.isArray(data) || data.length < 18) throw new Error('unexpected data shape');
+    if(!Array.isArray(data) || data.length < WORDS_PER_GAME) throw new Error('unexpected data shape');
     RAW_BANKS[lang] = data;
   } catch(err){
     console.warn(`Could not load ${jsonUrl}, using compact fallback word bank instead:`, err);
