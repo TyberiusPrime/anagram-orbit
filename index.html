@@ -345,6 +345,7 @@
         <option value="all">🌐 English</option>
         <option value="animals">🐾 English · Animals</option>
         <option value="de">🇩🇪 Deutsch</option>
+        <option value="kids">🧒 Deutsch · Kinder</option>
       </select>
       <button class="ghost" id="randomBtn">New Random Game</button>
     </div>
@@ -435,6 +436,7 @@ const STRINGS = {
     modeDaily: 'DAILY',
     modeRandom: 'RANDOM',
     animalsSuffix: ' · ANIMALS',
+    kidsSuffix: ' · KIDS',
     subtitleDaily: (day) => `Today's puzzle · ${day}`,
     subtitlePastDaily: (day) => `Puzzle for ${day} · not today's — jump back anytime`,
     subtitleRandom: 'Random orbit · share this URL to send this exact puzzle',
@@ -478,6 +480,7 @@ const STRINGS = {
     modeDaily: 'TÄGLICH',
     modeRandom: 'ZUFALL',
     animalsSuffix: '',
+    kidsSuffix: ' · KINDER',
     subtitleDaily: (day) => `Heutiges Rätsel · ${day}`,
     subtitlePastDaily: (day) => `Rätsel für ${day} · nicht das heutige — jederzeit zurückspringen`,
     subtitleRandom: 'Zufalls-Orbit · teile diese URL, um genau dieses Rätsel zu senden',
@@ -516,11 +519,12 @@ const STRINGS = {
 };
 
 /* ============ Word banks ============ */
-/* Each language has its own primary bank, fetched at startup from a JSON
-   file (English: wordnet_words.json, 15k+ words with definitions and
-   categories, derived from Princeton WordNet; German: dewiktionary_words.json,
-   6k+ words with definitions and word-class, extracted from the German
-   Wiktionary via kaikki.org/wiktextract). The fallback lists below are only
+/* Each bank is fetched at startup from a JSON file (English:
+   wordnet_words.json, 15k+ words with definitions and categories, derived
+   from Princeton WordNet; German: dewiktionary_words.json, 6k+ words with
+   definitions and word-class, extracted from the German Wiktionary via
+   kaikki.org/wiktextract; German for kids: de_kids_words.json, built from
+   the Wiktionary extract by tools/build_kids_pack.py). The lists below are only
    an emergency fallback for when that fetch fails (e.g. the page was opened
    directly as a file:// URL with no local server, so fetch() of a sibling
    JSON file is blocked by the browser). */
@@ -568,26 +572,43 @@ const FALLBACK_BANK_DE = [
   {word:"KOSMOS", def:"das Universum, betrachtet als ein weites, geordnetes, harmonisches System", category:""},
   {word:"STERNENSTAUB", def:"feine Materieteilchen, die von sterbenden Sternen verstreut werden", category:""}
 ];
-const RAW_BANKS = { en: FALLBACK_BANK_EN, de: FALLBACK_BANK_DE };
+/* Banks are keyed by data source, not by language: German has two of them,
+   the full Wiktionary extract and the kids' list. Each maps to the JSON file
+   fetched at startup, with a fallback bank standing in until it arrives. */
+const BANK_FILES = {
+  en:     'wordnet_words.json',
+  de:     'dewiktionary_words.json',
+  dekids: 'de_kids_words.json'
+};
+const RAW_BANKS = {
+  en: FALLBACK_BANK_EN,
+  de: FALLBACK_BANK_DE,
+  dekids: FALLBACK_BANK_DE
+};
 let WORD_BANK = RAW_BANKS.en;
 const WORDS_PER_GAME = 12;
 
-/* "Packs" are client-side filters over a language's fetched word list — no
-   extra network request needed. 'animals' keeps only WordNet's noun.animal
-   category (English only, for now). Falls back to the language's full bank
-   if a pack ends up too small to build a puzzle from (e.g. the compact
-   fallback bank has no categories). A pack's `lang` is also what selects
-   the active language everywhere else — the dropdown doubles as the
-   language switcher. */
+/* "Packs" pick a bank and optionally filter it client-side. 'animals' keeps
+   only WordNet's noun.animal category (English only, for now) and falls back
+   to the whole bank if the filter leaves too few words to build a puzzle
+   from (e.g. the compact fallback bank has no categories). 'kids' instead
+   draws on its own pre-built bank: the reading-level filtering it needs
+   depends on a corpus frequency list far too large to ship to the browser,
+   so it happens offline in tools/ (see tools/build_kids_pack.py). A pack's
+   `lang` selects the UI language — the dropdown doubles as the language
+   switcher — while `bank` selects the word list, and the two differ for
+   'kids', which is German but not the German bank. */
 const PACKS = {
   all:     { lang:'en', filter: null },
   animals: { lang:'en', filter: w => w.category === 'noun.animal' },
-  de:      { lang:'de', filter: null }
+  de:      { lang:'de', filter: null },
+  kids:    { lang:'de', bank:'dekids', filter: null }
 };
+function bankOf(cfg){ return cfg.bank || cfg.lang; }
 function defaultPackForLang(lang){ return lang === 'de' ? 'de' : 'all'; }
 function getPackWords(pack){
   const cfg = PACKS[pack];
-  const raw = RAW_BANKS[cfg.lang];
+  const raw = RAW_BANKS[bankOf(cfg)];
   if(cfg.filter){
     const filtered = raw.filter(cfg.filter);
     if(filtered.length >= WORDS_PER_GAME) return filtered;
@@ -818,7 +839,7 @@ function newGame(mode, seedOverride, packOverride){
   const rng = mulberry32(hashSeed(seedStr));
 
   WORD_BANK = getPackWords(pack);
-  if(cfg.filter && WORD_BANK === RAW_BANKS[cfg.lang]) pack = defaultPackForLang(cfg.lang); // pack fell back (too few matches)
+  if(cfg.filter && WORD_BANK === RAW_BANKS[bankOf(cfg)]) pack = defaultPackForLang(cfg.lang); // pack fell back (too few matches)
   putHash(pack, seedStr);
 
   const order = seededShuffle(WORD_BANK.map((_,i)=>i), rng);
@@ -864,7 +885,9 @@ function newGame(mode, seedOverride, packOverride){
 
   applyLangUI(cfg.lang);
   document.getElementById('modeBadge').textContent =
-    (effectiveMode === 'daily' ? S.modeDaily : S.modeRandom) + (pack === 'animals' ? S.animalsSuffix : '');
+    (effectiveMode === 'daily' ? S.modeDaily : S.modeRandom)
+    + (pack === 'animals' ? S.animalsSuffix : '')
+    + (pack === 'kids' ? S.kidsSuffix : '');
   document.getElementById('subtitle').textContent = effectiveMode === 'daily'
     ? (isTodayDaily ? S.subtitleDaily(dateStr) : S.subtitlePastDaily(dateStr))
     : S.subtitleRandom;
@@ -1384,14 +1407,14 @@ document.addEventListener('keydown', (e)=>{
 });
 
 /* ---------- Word bank loading ---------- */
-async function loadWordBank(lang){
-  const jsonUrl = lang === 'de' ? 'dewiktionary_words.json' : 'wordnet_words.json';
+async function loadWordBank(bank){
+  const jsonUrl = BANK_FILES[bank];
   try{
     const resp = await fetch(jsonUrl);
     if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     if(!Array.isArray(data) || data.length < WORDS_PER_GAME) throw new Error('unexpected data shape');
-    RAW_BANKS[lang] = data;
+    RAW_BANKS[bank] = data;
   } catch(err){
     console.warn(`Could not load ${jsonUrl}, using compact fallback word bank instead:`, err);
   }
@@ -1423,7 +1446,7 @@ document.getElementById('todayBtn').addEventListener('click', ()=> newGame('dail
 document.getElementById('shareBtn').addEventListener('click', (e)=> shareLink(baseShareUrl(), e.currentTarget));
 document.getElementById('shareExactBtn').addEventListener('click', (e)=> shareLink(exactShareUrl(), e.currentTarget));
 
-Promise.all([loadWordBank('en'), loadWordBank('de')]).then(()=>{
+Promise.all(Object.keys(BANK_FILES).map(loadWordBank)).then(()=>{
   const parsed = parseHash();
   if(parsed && parsed.seed){
     newGame(null, parsed.seed, parsed.pack);
