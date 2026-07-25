@@ -16,8 +16,8 @@ an anagram game, so the definition may not contain the word or anything built
 on its stem. That is checked here rather than trusted - violations go back for
 a repair round, and anything still leaking after that is dropped.
 
-Results are cached per batch under tools/.cache/rewrites/, so a re-run only
-pays for what changed.
+Results are cached per word under tools/.cache/rewrites/, so re-running after
+a threshold change in stage 1 only pays for the words that are actually new.
 
 Usage:
     python3 tools/rewrite_defs.py                 # rewrite, then write the pack
@@ -43,7 +43,7 @@ CACHE_DIR = os.path.join(ROOT, "tools", ".cache", "rewrites")
 
 MODEL = "claude-sonnet-5"
 BATCH_SIZE = 25
-WORKERS = 8
+WORKERS = 4
 MAX_DEF_LEN = 95
 
 PROMPT = """Du schreibst Worterklaerungen fuer ein Anagramm-Ratespiel fuer \
@@ -103,9 +103,11 @@ LOWERABLE = None
 def normalize(text):
     """Trim, drop a trailing period, and align the leading capital."""
     text = re.sub(r"\s+", " ", text).strip().rstrip(".").strip()
-    head = text.split(" ", 1)[0]
-    if head.lower() in LOWERABLE and head[:1].isupper():
-        text = head[0].lower() + text[1:]
+    # Match the bare head word: "Jemand," and "Etwas," are lowercase-able too,
+    # and would miss the lookup with their punctuation still attached.
+    head = re.match(r"[^\W\d_]+", text)
+    if head and head.group(0)[:1].isupper() and head.group(0).lower() in LOWERABLE:
+        text = text[0].lower() + text[1:]
     return text
 
 
@@ -133,16 +135,63 @@ def valid(word, entry):
     return not leaks(word, d)
 
 
+def word_cache_path(word, repair):
+    """Cache location for a single rewritten word.
+
+    Keyed per word rather than per batch on purpose: batching is just a cost
+    optimization, and hashing whole batches means adding or removing one
+    candidate reshuffles every batch after it and re-pays for the entire
+    list. Per-word entries survive any threshold change in stage 1.
+    """
+    key = hashlib.sha256(
+        (MODEL + ("R" if repair else "") + word).encode()
+    ).hexdigest()[:16]
+    return os.path.join(CACHE_DIR, "words", key + ".json")
+
+
+def cached_words(batch, repair):
+    """Cached entries for a batch, or None if any word is missing."""
+    out = []
+    for cand in batch:
+        path = word_cache_path(cand["word"], repair)
+        if not os.path.exists(path):
+            return None
+        with open(path, encoding="utf-8") as fh:
+            out.append(json.load(fh))
+    return out
+
+
+def cache_words(entries, repair):
+    os.makedirs(os.path.join(CACHE_DIR, "words"), exist_ok=True)
+    for entry in entries:
+        if not isinstance(entry, dict) or not entry.get("w"):
+            continue
+        path = word_cache_path(entry["w"].strip().upper(), repair)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(entry, fh, ensure_ascii=False)
+
+
+def backfill_word_cache():
+    """Seed the per-word cache from any older batch-keyed cache files."""
+    if not os.path.isdir(CACHE_DIR):
+        return
+    for name in os.listdir(CACHE_DIR):
+        if not name.endswith(".json"):
+            continue
+        with open(os.path.join(CACHE_DIR, name), encoding="utf-8") as fh:
+            try:
+                entries = json.load(fh)
+            except json.JSONDecodeError:
+                continue
+        if isinstance(entries, list):
+            cache_words(entries, repair=False)
+
+
 def run_batch(batch, repair=False):
     """One `claude -p` call over a list of candidate dicts."""
-    key = hashlib.sha256(
-        (MODEL + ("R" if repair else "") + "|".join(w["word"] for w in batch)
-         + "|".join(w["def"] for w in batch)).encode()
-    ).hexdigest()[:16]
-    cache_path = os.path.join(CACHE_DIR, key + ".json")
-    if os.path.exists(cache_path):
-        with open(cache_path, encoding="utf-8") as fh:
-            return json.load(fh)
+    hit = cached_words(batch, repair)
+    if hit is not None:
+        return hit
 
     listing = "\n".join(
         f'{w["word"]} [{w["category"]}]: {w["def"]}' for w in batch
@@ -165,9 +214,7 @@ def run_batch(batch, repair=False):
         sys.stderr.write(f"bad JSON: {err}\n")
         return []
 
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    with open(cache_path, "w", encoding="utf-8") as fh:
-        json.dump(parsed, fh, ensure_ascii=False)
+    cache_words(parsed, repair)
     return parsed
 
 
@@ -197,6 +244,7 @@ def main():
 
     global LOWERABLE
     LOWERABLE = lowercaseable()
+    backfill_word_cache()
 
     with open(CANDIDATES, encoding="utf-8") as fh:
         candidates = json.load(fh)

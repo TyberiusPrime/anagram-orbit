@@ -48,6 +48,12 @@ BLOCKED_WORDS = {
     "NACKT", "NUTTE", "ORGASMUS", "PENIS", "PISTOLE", "PUFF", "SAUFEN",
     "SCHEISSE", "SCHWANZ", "SELBSTMORD", "SEX", "TITTE", "TITTEN", "VAGINA",
     "VERGEWALTIGUNG", "WHISKY", "ZUHAELTER", "ZUHÄLTER",
+    # Not about the word's own meaning - both have perfectly innocent
+    # definitions ("Reisefuehrer", "Ureinwohner Amerikas"). FUEHRER carries
+    # obvious historical baggage as a bare word in a German kids' game, and
+    # INDIANER is a term contemporary German children's publishing has largely
+    # moved away from. Drop either line if you disagree.
+    "FUEHRER", "FÜHRER", "INDIANER",
 }
 
 # Applied to the *definition*, to catch adult words the list above misses.
