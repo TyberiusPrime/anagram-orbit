@@ -1,5 +1,7 @@
 A silly little anagram word game.
 
+[Play it now!](https://tyberiusprime.github.io/anagram-orbit/)
+
 Dictionaries: 
 
 English, WordNet, see LICENSE.WordNet.txt
