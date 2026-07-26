@@ -1,0 +1,7 @@
+# Downloaded frequency list and per-batch LLM rewrite cache. Both are
+# reproducible from the scripts; neither belongs in the repo.
+.cache/
+
+# Stage 1 -> stage 2 handoff. Regenerated in seconds by build_kids_pack.py;
+# only the finished pack in the repo root is worth checking in.
+de_kids_candidates.json
