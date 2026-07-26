@@ -98,6 +98,7 @@
     padding:9px 14px; border-radius:10px; cursor:pointer; transition:all .15s ease;
   }
   .ghost:hover{border-color:var(--cyan); color:var(--cyan); background:rgba(111,227,255,0.06);}
+  .ghost.danger:hover{border-color:var(--red); color:var(--red); background:rgba(255,107,107,0.06);}
   select.ghost{
     -webkit-appearance:none; appearance:none;
     background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238890c0'/></svg>");
@@ -341,6 +342,7 @@
       <button class="ghost" id="todayBtn" style="display:none">Today's riddle</button>
       <button class="ghost" id="shareBtn">Share</button>
       <button class="ghost" id="shareExactBtn" style="display:none">Share this puzzle</button>
+      <button class="ghost danger" id="resetBtn">Reset</button>
       <select class="ghost" id="packSelect" title="Choose word pack / language">
         <option value="all">🌐 English</option>
         <option value="animals">🐾 English · Animals</option>
@@ -447,6 +449,9 @@ const STRINGS = {
     shareExactBtn: '⇪ Share this puzzle',
     shareExactBtnTitle: 'Share this exact puzzle',
     shareCopied: 'Link copied!',
+    resetBtn: '↻ Reset',
+    resetBtnTitle: "Clear this puzzle's progress, e.g. so the next player can start fresh on a shared device",
+    resetConfirm: "Clear progress on this puzzle and start over? This can't be undone.",
     missionLog: 'Mission Log',
     logEmpty: 'Solved words will appear here as you go.',
     logSub: (n, total) => `${n} / ${total} charted`,
@@ -491,6 +496,9 @@ const STRINGS = {
     shareExactBtn: '⇪ Dieses Rätsel teilen',
     shareExactBtnTitle: 'Genau dieses Rätsel teilen',
     shareCopied: 'Link kopiert!',
+    resetBtn: '↻ Zurücksetzen',
+    resetBtnTitle: 'Fortschritt bei diesem Rätsel löschen, z. B. damit die nächste Person auf einem gemeinsam genutzten Gerät neu beginnen kann',
+    resetConfirm: 'Fortschritt bei diesem Rätsel löschen und neu beginnen? Das kann nicht rückgängig gemacht werden.',
     missionLog: 'Missionslog',
     logEmpty: 'Gelöste Wörter erscheinen hier, sobald du sie schaffst.',
     logSub: (n, total) => `${n} / ${total} erfasst`,
@@ -738,6 +746,17 @@ function loadProgress(pack, seedStr){
   } catch(e){}
   return null;
 }
+function clearProgress(pack, seedStr){
+  try{
+    const key = progressKey(pack, seedStr);
+    localStorage.removeItem(key);
+    let idx;
+    try{ idx = JSON.parse(localStorage.getItem(LS_INDEX_KEY)) || []; } catch(e){ idx = []; }
+    idx = idx.filter(k => k !== key);
+    localStorage.setItem(LS_INDEX_KEY, JSON.stringify(idx));
+  } catch(e){ /* localStorage unavailable — nothing to clear */ }
+}
+
 function rebuildLog(){
   state.solved.forEach(rec => {
     const w = state.words[rec.index];
@@ -824,6 +843,8 @@ function applyLangUI(lang){
   document.getElementById('shareBtn').title = S.shareBtnTitle;
   document.getElementById('shareExactBtn').textContent = S.shareExactBtn;
   document.getElementById('shareExactBtn').title = S.shareExactBtnTitle;
+  document.getElementById('resetBtn').textContent = S.resetBtn;
+  document.getElementById('resetBtn').title = S.resetBtnTitle;
 }
 
 function newGame(mode, seedOverride, packOverride){
@@ -1445,6 +1466,13 @@ document.getElementById('dateSelect').addEventListener('change', (e)=>{
 document.getElementById('todayBtn').addEventListener('click', ()=> newGame('daily', null, state.pack));
 document.getElementById('shareBtn').addEventListener('click', (e)=> shareLink(baseShareUrl(), e.currentTarget));
 document.getElementById('shareExactBtn').addEventListener('click', (e)=> shareLink(exactShareUrl(), e.currentTarget));
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  const S = STRINGS[state.lang];
+  if(!window.confirm(S.resetConfirm)) return;
+  const {pack, seedStr} = state;
+  clearProgress(pack, seedStr);
+  newGame(null, seedStr, pack);
+});
 
 Promise.all(Object.keys(BANK_FILES).map(loadWordBank)).then(()=>{
   const parsed = parseHash();
