@@ -98,6 +98,7 @@
     padding:9px 14px; border-radius:10px; cursor:pointer; transition:all .15s ease;
   }
   .ghost:hover{border-color:var(--cyan); color:var(--cyan); background:rgba(111,227,255,0.06);}
+  .ghost.danger:hover{border-color:var(--red); color:var(--red); background:rgba(255,107,107,0.06);}
   select.ghost{
     -webkit-appearance:none; appearance:none;
     background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238890c0'/></svg>");
@@ -341,6 +342,7 @@
       <button class="ghost" id="todayBtn" style="display:none">Today's riddle</button>
       <button class="ghost" id="shareBtn">Share</button>
       <button class="ghost" id="shareExactBtn" style="display:none">Share this puzzle</button>
+      <button class="ghost danger" id="resetBtn">Reset</button>
       <select class="ghost" id="packSelect" title="Choose word pack / language">
         <option value="all">🌐 English</option>
         <option value="animals">🐾 English · Animals</option>
@@ -447,6 +449,9 @@ const STRINGS = {
     shareExactBtn: '⇪ Share this puzzle',
     shareExactBtnTitle: 'Share this exact puzzle',
     shareCopied: 'Link copied!',
+    resetBtn: '↻ Reset',
+    resetBtnTitle: "Clear this puzzle's progress, e.g. so the next player can start fresh on a shared device",
+    resetConfirm: "Clear progress on this puzzle and start over? This can't be undone.",
     missionLog: 'Mission Log',
     logEmpty: 'Solved words will appear here as you go.',
     logSub: (n, total) => `${n} / ${total} charted`,
@@ -491,6 +496,9 @@ const STRINGS = {
     shareExactBtn: '⇪ Dieses Rätsel teilen',
     shareExactBtnTitle: 'Genau dieses Rätsel teilen',
     shareCopied: 'Link kopiert!',
+    resetBtn: '↻ Zurücksetzen',
+    resetBtnTitle: 'Fortschritt bei diesem Rätsel löschen, z. B. damit die nächste Person auf einem gemeinsam genutzten Gerät neu beginnen kann',
+    resetConfirm: 'Fortschritt bei diesem Rätsel löschen und neu beginnen? Das kann nicht rückgängig gemacht werden.',
     missionLog: 'Missionslog',
     logEmpty: 'Gelöste Wörter erscheinen hier, sobald du sie schaffst.',
     logSub: (n, total) => `${n} / ${total} erfasst`,
@@ -738,6 +746,17 @@ function loadProgress(pack, seedStr){
   } catch(e){}
   return null;
 }
+function clearProgress(pack, seedStr){
+  try{
+    const key = progressKey(pack, seedStr);
+    localStorage.removeItem(key);
+    let idx;
+    try{ idx = JSON.parse(localStorage.getItem(LS_INDEX_KEY)) || []; } catch(e){ idx = []; }
+    idx = idx.filter(k => k !== key);
+    localStorage.setItem(LS_INDEX_KEY, JSON.stringify(idx));
+  } catch(e){ /* localStorage unavailable — nothing to clear */ }
+}
+
 function rebuildLog(){
   state.solved.forEach(rec => {
     const w = state.words[rec.index];
@@ -824,9 +843,15 @@ function applyLangUI(lang){
   document.getElementById('shareBtn').title = S.shareBtnTitle;
   document.getElementById('shareExactBtn').textContent = S.shareExactBtn;
   document.getElementById('shareExactBtn').title = S.shareExactBtnTitle;
+  document.getElementById('resetBtn').textContent = S.resetBtn;
+  document.getElementById('resetBtn').title = S.resetBtnTitle;
 }
 
 function newGame(mode, seedOverride, packOverride){
+  // A pending auto-advance from whatever game was showing (e.g. the user
+  // switched language mid-animation) must not fire later against this new
+  // state — it would call setupWord() on the wrong pack's current word.
+  clearTimeout(window._autoAdvance);
   let pack = PACKS[packOverride] ? packOverride : 'all';
   const cfg = PACKS[pack];
   const S = STRINGS[cfg.lang];
@@ -876,11 +901,27 @@ function newGame(mode, seedOverride, packOverride){
   if(saved){
     state.currentIndex = Math.min(Math.max(saved.currentIndex||0, 0), state.words.length-1);
     state.solved = Array.isArray(saved.solved) ? saved.solved : [];
+    // Repair progress written by the now-fixed race where currentIndex could
+    // lag behind solved.length (see handleCorrect/useSkip): drop repeat
+    // attempts at the same index (keeping the first) and fast-forward past
+    // every word already on record as solved/skipped. When that happens the
+    // saved hint/def/timing state below belongs to the stuck word, not the
+    // fresh one we're jumping to, so it must not be restored.
+    const seenIndex = new Set();
+    state.solved = state.solved.filter(rec => {
+      if(seenIndex.has(rec.index)) return false;
+      seenIndex.add(rec.index);
+      return true;
+    });
+    const repaired = state.solved.length > state.currentIndex;
+    if(repaired) state.currentIndex = Math.min(state.solved.length, state.words.length-1);
     state.penaltySeconds = saved.penaltySeconds || 0;
     state.accumulatedMs = saved.accumulatedMs || 0;
     state.finished = !!saved.finished;
     if(state.finished) state.segmentStart = null;
-    restoreOpts = { hintUsed: saved.hintUsed, defUsed: saved.defUsed, wordStartAccumulatedMs: saved.wordStartAccumulatedMs };
+    if(!repaired){
+      restoreOpts = { hintUsed: saved.hintUsed, defUsed: saved.defUsed, wordStartAccumulatedMs: saved.wordStartAccumulatedMs };
+    }
   }
 
   applyLangUI(cfg.lang);
@@ -1120,6 +1161,13 @@ function handleCorrect(){
   const w = currentWordObj();
   const timeTaken = Math.max(0, Math.round((activeMsNow() - state.wordStartAccumulatedMs)/1000));
   state.solved.push({index: state.currentIndex, word:w.word, def:w.def, skipped:false, timeTaken, hintUsed: state.hintUsed, defUsed: state.defUsed});
+  // Advance the pointer right away, in lockstep with the push above, so
+  // currentIndex and solved.length are never out of sync for the ~1s the
+  // auto-advance timer is pending — a save (or a language switch, which
+  // reloads a possibly-different pack's own saved progress) landing in
+  // that window used to persist a currentIndex that lagged solved.length,
+  // making the mission log and the on-screen word desync on reload.
+  state.currentIndex++;
 
   // happy wiggle, staggered left-to-right across the slots...
   document.querySelectorAll('#slots .slot').forEach((s,i) => {
@@ -1154,7 +1202,7 @@ function handleCorrect(){
 
 function advanceWord(){
   clearTimeout(window._autoAdvance);
-  const next = state.currentIndex + 1;
+  const next = state.currentIndex; // already advanced in handleCorrect/useSkip
   if(next >= state.words.length){
     finishGame();
   } else {
@@ -1215,6 +1263,7 @@ function useSkip(){
   state.penaltySeconds += 120;
   flashPenalty();
   state.solved.push({index: state.currentIndex, word:w.word, def:w.def, skipped:true, timeTaken:null, hintUsed: state.hintUsed, defUsed: state.defUsed});
+  state.currentIndex++; // keep in lockstep with solved.length, see handleCorrect
   renderProgress();
   addLogEntry(w.word, w.def, true, null, w.category);
 
@@ -1445,6 +1494,13 @@ document.getElementById('dateSelect').addEventListener('change', (e)=>{
 document.getElementById('todayBtn').addEventListener('click', ()=> newGame('daily', null, state.pack));
 document.getElementById('shareBtn').addEventListener('click', (e)=> shareLink(baseShareUrl(), e.currentTarget));
 document.getElementById('shareExactBtn').addEventListener('click', (e)=> shareLink(exactShareUrl(), e.currentTarget));
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  const S = STRINGS[state.lang];
+  if(!window.confirm(S.resetConfirm)) return;
+  const {pack, seedStr} = state;
+  clearProgress(pack, seedStr);
+  newGame(null, seedStr, pack);
+});
 
 Promise.all(Object.keys(BANK_FILES).map(loadWordBank)).then(()=>{
   const parsed = parseHash();
