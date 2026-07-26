@@ -848,6 +848,10 @@ function applyLangUI(lang){
 }
 
 function newGame(mode, seedOverride, packOverride){
+  // A pending auto-advance from whatever game was showing (e.g. the user
+  // switched language mid-animation) must not fire later against this new
+  // state — it would call setupWord() on the wrong pack's current word.
+  clearTimeout(window._autoAdvance);
   let pack = PACKS[packOverride] ? packOverride : 'all';
   const cfg = PACKS[pack];
   const S = STRINGS[cfg.lang];
@@ -897,11 +901,27 @@ function newGame(mode, seedOverride, packOverride){
   if(saved){
     state.currentIndex = Math.min(Math.max(saved.currentIndex||0, 0), state.words.length-1);
     state.solved = Array.isArray(saved.solved) ? saved.solved : [];
+    // Repair progress written by the now-fixed race where currentIndex could
+    // lag behind solved.length (see handleCorrect/useSkip): drop repeat
+    // attempts at the same index (keeping the first) and fast-forward past
+    // every word already on record as solved/skipped. When that happens the
+    // saved hint/def/timing state below belongs to the stuck word, not the
+    // fresh one we're jumping to, so it must not be restored.
+    const seenIndex = new Set();
+    state.solved = state.solved.filter(rec => {
+      if(seenIndex.has(rec.index)) return false;
+      seenIndex.add(rec.index);
+      return true;
+    });
+    const repaired = state.solved.length > state.currentIndex;
+    if(repaired) state.currentIndex = Math.min(state.solved.length, state.words.length-1);
     state.penaltySeconds = saved.penaltySeconds || 0;
     state.accumulatedMs = saved.accumulatedMs || 0;
     state.finished = !!saved.finished;
     if(state.finished) state.segmentStart = null;
-    restoreOpts = { hintUsed: saved.hintUsed, defUsed: saved.defUsed, wordStartAccumulatedMs: saved.wordStartAccumulatedMs };
+    if(!repaired){
+      restoreOpts = { hintUsed: saved.hintUsed, defUsed: saved.defUsed, wordStartAccumulatedMs: saved.wordStartAccumulatedMs };
+    }
   }
 
   applyLangUI(cfg.lang);
@@ -1141,6 +1161,13 @@ function handleCorrect(){
   const w = currentWordObj();
   const timeTaken = Math.max(0, Math.round((activeMsNow() - state.wordStartAccumulatedMs)/1000));
   state.solved.push({index: state.currentIndex, word:w.word, def:w.def, skipped:false, timeTaken, hintUsed: state.hintUsed, defUsed: state.defUsed});
+  // Advance the pointer right away, in lockstep with the push above, so
+  // currentIndex and solved.length are never out of sync for the ~1s the
+  // auto-advance timer is pending — a save (or a language switch, which
+  // reloads a possibly-different pack's own saved progress) landing in
+  // that window used to persist a currentIndex that lagged solved.length,
+  // making the mission log and the on-screen word desync on reload.
+  state.currentIndex++;
 
   // happy wiggle, staggered left-to-right across the slots...
   document.querySelectorAll('#slots .slot').forEach((s,i) => {
@@ -1175,7 +1202,7 @@ function handleCorrect(){
 
 function advanceWord(){
   clearTimeout(window._autoAdvance);
-  const next = state.currentIndex + 1;
+  const next = state.currentIndex; // already advanced in handleCorrect/useSkip
   if(next >= state.words.length){
     finishGame();
   } else {
@@ -1236,6 +1263,7 @@ function useSkip(){
   state.penaltySeconds += 120;
   flashPenalty();
   state.solved.push({index: state.currentIndex, word:w.word, def:w.def, skipped:true, timeTaken:null, hintUsed: state.hintUsed, defUsed: state.defUsed});
+  state.currentIndex++; // keep in lockstep with solved.length, see handleCorrect
   renderProgress();
   addLogEntry(w.word, w.def, true, null, w.category);
 
